@@ -1,5 +1,7 @@
 using AutoMapper;
+using AppointmentModel = fletesProyect.Appointment.Appointment;
 using fletesProyect.Patient;
+using project.Appointment.dto;
 using project.roles;
 using project.roles.dto;
 using project.users;
@@ -26,6 +28,9 @@ namespace project.utils.autoMapper
             CreateMap<clientCreationDto, userCreationDto>();
             CreateMap<Catalogue, catalogueDto>();
             CreateMap<catalogueCreationDto, Catalogue>();
+            CreateMap<AppointmentModel, citaDto>()
+                .ForMember(dest => dest.status, opt => opt.MapFrom(src => src.deleteAt == null ? "ACTIVO" : "CANCELADO"));
+            CreateMap<citaCreationDto, AppointmentModel>();
 
         }
 

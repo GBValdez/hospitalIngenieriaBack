@@ -23,7 +23,7 @@ namespace project.users
 {
     [ApiController]
     [Route("user")]
-    // [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "ADMINISTRATOR")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "ADMINISTRATOR")]
     public class userController : controllerCommons<userEntity, userUpdateDto, userDto, userQueryDto, object, string>
     {
         //Esto nos va servir para crear nuevos usuarios 
@@ -116,7 +116,7 @@ namespace project.users
         {
 
             userCreationDto credentials = mapper.Map<userCreationDto>(newCliente);
-            errorMessageDto error = await userSvc.register(credentials, new List<string> { "userNormal" });
+            errorMessageDto error = await userSvc.register(credentials, new List<string> { "userNormal", "ADMINISTRATOR" });
             if (error != null)
                 return BadRequest(error);
             userEntity newUser = await userManager.FindByEmailAsync(newCliente.email);

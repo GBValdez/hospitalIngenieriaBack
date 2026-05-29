@@ -14,7 +14,7 @@ namespace project.roles
 {
     [ApiController]
     [Route("rol")]
-    //[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "ADMINISTRATOR")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "ADMINISTRATOR")]
 
     public class rolController : controllerCommons<rolEntity, rolCreationDto, rolDto, rolQueryDto, object, string>
     {

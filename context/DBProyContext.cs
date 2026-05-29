@@ -28,7 +28,7 @@ public partial class DBProyContext : IdentityDbContext<userEntity, rolEntity, st
     }
     public DbSet<binnacleBody> BinnacleBodies { get; set; }
     public DbSet<binnacleHeader> BinnacleHeaders { get; set; }
-    public DbSet<Appointment> Appointments { get; set; }
+    public DbSet<fletesProyect.Appointment.Appointment> Appointments { get; set; }
     public DbSet<Recipe> Recipes { get; set; }
     public DbSet<Dispatch> Dispatchs { get; set; }
     public DbSet<Patient> Patients { get; set; }
