@@ -20,5 +20,6 @@ namespace project.Exams.dto
         public int patientId { get; set; }
         public string patientName { get; set; }
         public string status { get; set; }
+        public List<string> diseasesOrInjuries { get; set; } = new List<string>();
     }
 }

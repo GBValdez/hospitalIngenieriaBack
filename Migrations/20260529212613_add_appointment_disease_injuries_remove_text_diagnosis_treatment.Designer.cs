@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using project.Models;
@@ -11,9 +12,11 @@ using project.Models;
 namespace fletesProyect.Migrations
 {
     [DbContext(typeof(DBProyContext))]
-    partial class DBProyContextModelSnapshot : ModelSnapshot
+    [Migration("20260529212613_add_appointment_disease_injuries_remove_text_diagnosis_treatment")]
+    partial class add_appointment_disease_injuries_remove_text_diagnosis_treatment
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -472,45 +475,6 @@ namespace fletesProyect.Migrations
                     b.ToTable("Exams");
                 });
 
-            modelBuilder.Entity("fletesProyect.ExamDiseaseOrInjury.ExamDiseaseOrInjury", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime?>("createAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("deleteAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long>("diseaseOrInjuryId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("examId")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime?>("updateAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("userUpdateId")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("diseaseOrInjuryId");
-
-                    b.HasIndex("userUpdateId");
-
-                    b.HasIndex("examId", "diseaseOrInjuryId")
-                        .IsUnique()
-                        .HasFilter("\"deleteAt\" IS NULL");
-
-                    b.ToTable("ExamDiseaseOrInjuries");
-                });
-
             modelBuilder.Entity("fletesProyect.ExamStatusHistory.ExamStatusHistory", b =>
                 {
                     b.Property<long>("Id")
@@ -562,48 +526,6 @@ namespace fletesProyect.Migrations
                     b.HasIndex("userUpdateId");
 
                     b.ToTable("ExamStatusHistories");
-                });
-
-            modelBuilder.Entity("fletesProyect.ExamTypeDiseaseOrInjury.ExamTypeDiseaseOrInjury", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime?>("createAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("deleteAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long>("diseaseOrInjuryId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("examTypeId")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("notes")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("updateAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("userUpdateId")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("diseaseOrInjuryId");
-
-                    b.HasIndex("userUpdateId");
-
-                    b.HasIndex("examTypeId", "diseaseOrInjuryId")
-                        .IsUnique()
-                        .HasFilter("\"deleteAt\" IS NULL");
-
-                    b.ToTable("ExamTypeDiseaseOrInjuries");
                 });
 
             modelBuilder.Entity("fletesProyect.LaboratoryAttendantExamType.LaboratoryAttendantExamType", b =>
@@ -1626,31 +1548,6 @@ namespace fletesProyect.Migrations
                     b.Navigation("userUpdate");
                 });
 
-            modelBuilder.Entity("fletesProyect.ExamDiseaseOrInjury.ExamDiseaseOrInjury", b =>
-                {
-                    b.HasOne("fletesProyect.catalogues.DiseaseOrInjury", "diseaseOrInjury")
-                        .WithMany()
-                        .HasForeignKey("diseaseOrInjuryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("fletesProyect.Exam.Exam", "exam")
-                        .WithMany()
-                        .HasForeignKey("examId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("project.users.userEntity", "userUpdate")
-                        .WithMany()
-                        .HasForeignKey("userUpdateId");
-
-                    b.Navigation("diseaseOrInjury");
-
-                    b.Navigation("exam");
-
-                    b.Navigation("userUpdate");
-                });
-
             modelBuilder.Entity("fletesProyect.ExamStatusHistory.ExamStatusHistory", b =>
                 {
                     b.HasOne("project.users.userEntity", "changedByUser")
@@ -1684,31 +1581,6 @@ namespace fletesProyect.Migrations
                     b.Navigation("previousStatus");
 
                     b.Navigation("status");
-
-                    b.Navigation("userUpdate");
-                });
-
-            modelBuilder.Entity("fletesProyect.ExamTypeDiseaseOrInjury.ExamTypeDiseaseOrInjury", b =>
-                {
-                    b.HasOne("fletesProyect.catalogues.DiseaseOrInjury", "diseaseOrInjury")
-                        .WithMany()
-                        .HasForeignKey("diseaseOrInjuryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("fletesProyect.catalogues.ExamType", "examType")
-                        .WithMany()
-                        .HasForeignKey("examTypeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("project.users.userEntity", "userUpdate")
-                        .WithMany()
-                        .HasForeignKey("userUpdateId");
-
-                    b.Navigation("diseaseOrInjury");
-
-                    b.Navigation("examType");
 
                     b.Navigation("userUpdate");
                 });

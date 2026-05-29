@@ -4,8 +4,10 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using AutoMapper;
+using fletesProyect.AppointmentDiseaseOrInjury;
 using fletesProyect.AppointmentStatusHistory;
 using fletesProyect.ExamStatusHistory;
+using fletesProyect.MedicineDiseaseOrInjuryDosage;
 using fletesProyect.Worker;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -75,10 +77,29 @@ namespace project.Appointment
             if (!string.IsNullOrWhiteSpace(queryParams.estado))
             {
                 string estado = queryParams.estado.Trim().ToLower();
-                if (estado == "activo")
-                    query = query.Where(x => x.deleteAt == null);
-                else if (estado == "cancelado")
-                    query = query.Where(x => x.deleteAt != null);
+                query = query.Where(x => context.AppointmentStatusHistories
+                    .Where(h => h.appointmentId == x.Id && h.deleteAt == null)
+                    .OrderByDescending(h => h.changedAt)
+                    .Select(h => h.status.name.ToLower())
+                    .FirstOrDefault() == estado);
+            }
+
+            if (!string.IsNullOrWhiteSpace(queryParams.reason))
+            {
+                string reason = queryParams.reason.Trim().ToLower();
+                query = query.Where(x => x.reason.ToLower().Contains(reason));
+            }
+
+            if (queryParams.startDateFrom.HasValue)
+            {
+                DateTime startDateFrom = ToUtc(queryParams.startDateFrom.Value);
+                query = query.Where(x => x.startDate >= startDateFrom);
+            }
+
+            if (queryParams.startDateTo.HasValue)
+            {
+                DateTime startDateTo = ToUtc(queryParams.startDateTo.Value).Date.AddDays(1);
+                query = query.Where(x => x.startDate < startDateTo);
             }
 
             return query;
@@ -364,10 +385,19 @@ namespace project.Appointment
 
             DateTime now = DateTime.UtcNow;
             string previousStatus = await GetLastAppointmentStatus(appointment.Id);
-            appointment.diagnosis = dto.diagnosis.Trim();
             appointment.observations = string.IsNullOrWhiteSpace(dto.observations) ? null : dto.observations.Trim();
-            appointment.treatment = dto.treatment.Trim();
             appointment.endDate = now;
+
+            List<long> diseaseOrInjuryIds = GetSelectedDiseaseOrInjuryIds(dto);
+            foreach (long diseaseOrInjuryId in diseaseOrInjuryIds)
+            {
+                context.AppointmentDiseaseOrInjuries.Add(new AppointmentDiseaseOrInjury
+                {
+                    appointmentId = appointment.Id,
+                    diseaseOrInjuryId = diseaseOrInjuryId,
+                    createAt = now
+                });
+            }
 
             if (dto.requiresRecipe)
             {
@@ -445,6 +475,98 @@ namespace project.Appointment
             await TrySendNotification(() => notificationService.SendAppointmentFinalized(appointment.Id));
             appointment.currentStatus = StatusFinalizada;
             return mapper.Map<citaDto>(appointment);
+        }
+
+        [HttpGet("{id}/resultado")]
+        public async Task<ActionResult<citaResultadoDto>> GetResultadoCita(long id)
+        {
+            AppointmentModel appointment = await context.Set<AppointmentModel>()
+                .Include(x => x.doctor)
+                .Include(x => x.patient)
+                .FirstOrDefaultAsync(x => x.Id == id);
+
+            if (appointment == null)
+                return NotFound();
+
+            if (!CanManageAppointment(appointment))
+                return Forbid();
+
+            string currentStatus = await GetLastAppointmentStatus(appointment.Id);
+            if (currentStatus != StatusFinalizada)
+                return BadRequest(new errorMessageDto("Solo se puede ver el resultado de citas finalizadas."));
+
+            List<string> diseasesOrInjuries = await context.AppointmentDiseaseOrInjuries
+                .Include(x => x.diseaseOrInjury)
+                .Where(x => x.appointmentId == appointment.Id && x.deleteAt == null)
+                .OrderBy(x => x.diseaseOrInjury.name)
+                .Select(x => x.diseaseOrInjury.name)
+                .ToListAsync();
+
+            List<citaResultadoRecipeDto> recipes = await context.Recipes
+                .Include(x => x.medicine)
+                .Where(x => x.appointmentId == appointment.Id && x.deleteAt == null)
+                .OrderBy(x => x.Id)
+                .Select(x => new citaResultadoRecipeDto
+                {
+                    id = x.Id,
+                    medicineId = x.medicineId,
+                    medicineName = x.medicine.name,
+                    days = x.days,
+                    timeLimit = x.timeLimit,
+                    totalAmount = CalculatePrescribedAmount(x.days, x.timeLimit)
+                })
+                .ToListAsync();
+
+            List<citaResultadoExamDto> exams = await context.Exams
+                .Include(x => x.examType)
+                .Include(x => x.attendant)
+                .Where(x => x.appointmentId == appointment.Id && x.deleteAt == null)
+                .OrderBy(x => x.startDate)
+                .Select(x => new citaResultadoExamDto
+                {
+                    id = x.Id,
+                    examTypeName = x.examType.name,
+                    startDate = x.startDate,
+                    endDate = x.endDate,
+                    indications = x.observations,
+                    results = x.results,
+                    attendantName = x.attendant != null ? x.attendant.name : null
+                })
+                .ToListAsync();
+
+            List<long> examIds = exams.Select(x => x.id).ToList();
+            Dictionary<long, List<string>> examDiagnoses = await context.ExamDiseaseOrInjuries
+                .Include(x => x.diseaseOrInjury)
+                .Where(x => examIds.Contains(x.examId) && x.deleteAt == null && x.diseaseOrInjury.deleteAt == null)
+                .GroupBy(x => x.examId)
+                .Select(x => new
+                {
+                    examId = x.Key,
+                    diseasesOrInjuries = x
+                        .OrderBy(diagnosis => diagnosis.diseaseOrInjury.name)
+                        .Select(diagnosis => diagnosis.diseaseOrInjury.name)
+                        .ToList()
+                })
+                .ToDictionaryAsync(x => x.examId, x => x.diseasesOrInjuries);
+
+            foreach (citaResultadoExamDto exam in exams)
+                exam.diseasesOrInjuries = examDiagnoses.TryGetValue(exam.id, out List<string> diagnoses)
+                    ? diagnoses
+                    : new List<string>();
+
+            return new citaResultadoDto
+            {
+                appointmentId = appointment.Id,
+                reason = appointment.reason,
+                startDate = appointment.startDate,
+                endDate = appointment.endDate,
+                observations = appointment.observations,
+                doctorName = appointment.doctor?.name,
+                patientName = appointment.patient?.name,
+                diseasesOrInjuries = diseasesOrInjuries,
+                recipes = recipes,
+                exams = exams
+            };
         }
 
         [HttpDelete("{id}")]
@@ -568,20 +690,17 @@ namespace project.Appointment
             if (currentStatus != StatusEnCurso)
                 return new errorMessageDto("Solo se pueden finalizar citas con estado EN_CURSO.");
 
-            if (string.IsNullOrWhiteSpace(dto.diagnosis))
-                return new errorMessageDto("El diagnostico es obligatorio.");
-
-            if (dto.diagnosis.Trim().Length > 500)
-                return new errorMessageDto("El diagnostico no puede superar 500 caracteres.");
-
             if (!string.IsNullOrWhiteSpace(dto.observations) && dto.observations.Trim().Length > 500)
                 return new errorMessageDto("Las observaciones no pueden superar 500 caracteres.");
 
-            if (string.IsNullOrWhiteSpace(dto.treatment))
-                return new errorMessageDto("El tratamiento es obligatorio.");
+            List<long> diseaseOrInjuryIds = GetSelectedDiseaseOrInjuryIds(dto);
+            if (diseaseOrInjuryIds.Count == 0)
+                return new errorMessageDto("Debe seleccionar al menos una enfermedad o lesion diagnosticada.");
 
-            if (dto.treatment.Trim().Length > 500)
-                return new errorMessageDto("El tratamiento no puede superar 500 caracteres.");
+            int validDiseasesOrInjuries = await context.DiseaseOrInjuries
+                .CountAsync(x => diseaseOrInjuryIds.Contains(x.Id) && x.deleteAt == null);
+            if (validDiseasesOrInjuries != diseaseOrInjuryIds.Count)
+                return new errorMessageDto("Una o mas enfermedades o lesiones seleccionadas no existen.");
 
             if (dto.requiresRecipe)
             {
@@ -589,6 +708,9 @@ namespace project.Appointment
                     return new errorMessageDto("Debe agregar al menos un medicamento a la receta.");
 
                 List<long> medicineIds = dto.recipes.Select(x => x.medicineId).Distinct().ToList();
+                if (medicineIds.Count != dto.recipes.Count)
+                    return new errorMessageDto("No puede repetir medicamentos en la misma receta.");
+
                 int validMedicines = await context.Medicines
                     .CountAsync(x => medicineIds.Contains(x.Id) && x.deleteAt == null);
                 if (validMedicines != medicineIds.Count)
@@ -596,6 +718,42 @@ namespace project.Appointment
 
                 if (dto.recipes.Any(x => x.days <= 0 || x.timeLimit <= 0))
                     return new errorMessageDto("Los dias y el plazo entre dosis deben ser mayores a cero.");
+
+                List<MedicineDiseaseOrInjuryDosage> dosageRules = await context.MedicineDiseaseOrInjuryDosages
+                    .Include(x => x.medicine)
+                    .Include(x => x.diseaseOrInjury)
+                    .Where(x => medicineIds.Contains(x.medicineId)
+                        && diseaseOrInjuryIds.Contains(x.diseaseOrInjuryId)
+                        && x.deleteAt == null
+                        && x.medicine.deleteAt == null
+                        && x.diseaseOrInjury.deleteAt == null)
+                    .ToListAsync();
+
+                foreach (finalizarCitaRecipeDto recipe in dto.recipes)
+                {
+                    List<MedicineDiseaseOrInjuryDosage> matchingDosages = dosageRules
+                        .Where(x => x.medicineId == recipe.medicineId)
+                        .ToList();
+
+                    if (matchingDosages.Count == 0)
+                    {
+                        string medicineName = await context.Medicines
+                            .Where(x => x.Id == recipe.medicineId)
+                            .Select(x => x.name)
+                            .FirstOrDefaultAsync();
+                        return new errorMessageDto($"No hay una cantidad configurada para {medicineName ?? "el medicamento"} en las enfermedades o lesiones seleccionadas.");
+                    }
+
+                    int prescribedAmount = CalculatePrescribedAmount(recipe.days, recipe.timeLimit);
+                    MedicineDiseaseOrInjuryDosage dosage = matchingDosages
+                        .OrderBy(x => x.maximumAmount)
+                        .First();
+
+                    if (prescribedAmount > dosage.maximumAmount)
+                    {
+                        return new errorMessageDto($"La receta de {dosage.medicine.name} excede la cantidad maxima para {dosage.diseaseOrInjury.name}. Maximo permitido: {dosage.maximumAmount}. Cantidad calculada: {prescribedAmount}.");
+                    }
+                }
             }
 
             if (dto.requiresLabExams)
@@ -686,6 +844,24 @@ namespace project.Appointment
                 return new errorMessageDto("La talla debe ser un valor numerico mayor a cero.");
 
             return null;
+        }
+
+        private static int CalculatePrescribedAmount(int days, int timeLimit)
+        {
+            if (days <= 0 || timeLimit <= 0)
+                return 0;
+
+            return days * (int)Math.Ceiling(24m / timeLimit);
+        }
+
+        private static List<long> GetSelectedDiseaseOrInjuryIds(finalizarCitaDto dto)
+        {
+            List<long> ids = dto.diseaseOrInjuryIds ?? new List<long>();
+
+            return ids
+                .Where(x => x > 0)
+                .Distinct()
+                .ToList();
         }
 
         private int GetClaimInt(string claimType)

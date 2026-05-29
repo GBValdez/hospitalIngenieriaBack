@@ -10,9 +10,7 @@ namespace project.Appointment.dto
         public DateTime startDate { get; set; }
         public DateTime endDate { get; set; }
         public string? bloodPressure { get; set; }
-        public string? diagnosis { get; set; }
         public string? observations { get; set; }
-        public string? treatment { get; set; }
         public float temperature { get; set; }
         public float heartRate { get; set; }
         public float respiratoryRate { get; set; }

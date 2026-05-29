@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using fletesProyect.ExamDiseaseOrInjury;
 using fletesProyect.ExamStatusHistory;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -128,6 +129,25 @@ namespace project.Exams
                     ? status
                     : StatusActivo;
 
+            Dictionary<long, List<string>> diagnoses = await context.ExamDiseaseOrInjuries
+                .Include(x => x.diseaseOrInjury)
+                .Where(x => examIds.Contains(x.examId) && x.deleteAt == null && x.diseaseOrInjury.deleteAt == null)
+                .GroupBy(x => x.examId)
+                .Select(x => new
+                {
+                    examId = x.Key,
+                    diseasesOrInjuries = x
+                        .OrderBy(diagnosis => diagnosis.diseaseOrInjury.name)
+                        .Select(diagnosis => diagnosis.diseaseOrInjury.name)
+                        .ToList()
+                })
+                .ToDictionaryAsync(x => x.examId, x => x.diseasesOrInjuries);
+
+            foreach (examDto item in items)
+                item.diseasesOrInjuries = diagnoses.TryGetValue(item.id, out List<string> itemDiagnoses)
+                    ? itemDiagnoses
+                    : new List<string>();
+
             return new resPag<examDto>
             {
                 items = items,
@@ -191,7 +211,30 @@ namespace project.Exams
             if (dto.results.Trim().Length > 1000)
                 return BadRequest(new errorMessageDto("El resultado del examen no puede superar 1000 caracteres."));
 
+            List<long> diseaseOrInjuryIds = GetSelectedDiseaseOrInjuryIds(dto);
+            if (diseaseOrInjuryIds.Count == 0)
+                return BadRequest(new errorMessageDto("Debe seleccionar al menos una enfermedad o lesion diagnosticada por el examen."));
+
+            int validConfiguredDiagnoses = await context.ExamTypeDiseaseOrInjuries
+                .CountAsync(x => x.examTypeId == exam.examTypeId
+                    && diseaseOrInjuryIds.Contains(x.diseaseOrInjuryId)
+                    && x.deleteAt == null
+                    && x.diseaseOrInjury.deleteAt == null);
+            if (validConfiguredDiagnoses != diseaseOrInjuryIds.Count)
+                return BadRequest(new errorMessageDto("Una o mas enfermedades o lesiones no estan configuradas para este tipo de examen."));
+
             exam.results = dto.results.Trim();
+            DateTime now = DateTime.UtcNow;
+            foreach (long diseaseOrInjuryId in diseaseOrInjuryIds)
+            {
+                context.ExamDiseaseOrInjuries.Add(new ExamDiseaseOrInjury
+                {
+                    examId = exam.Id,
+                    diseaseOrInjuryId = diseaseOrInjuryId,
+                    createAt = now
+                });
+            }
+
             await AddExamStatusHistory(exam.Id, currentStatus, StatusFinalizada, "Examen finalizado.");
             await context.SaveChangesAsync();
             await TrySendNotification(() => notificationService.SendExamFinalized(exam.Id));
@@ -289,8 +332,24 @@ namespace project.Exams
                 doctorName = exam.appointment?.doctor?.name,
                 patientId = exam.appointment?.patientId ?? 0,
                 patientName = exam.appointment?.patient?.name,
-                status = status
+                status = status,
+                diseasesOrInjuries = context.ExamDiseaseOrInjuries
+                    .Include(x => x.diseaseOrInjury)
+                    .Where(x => x.examId == exam.Id && x.deleteAt == null && x.diseaseOrInjury.deleteAt == null)
+                    .OrderBy(x => x.diseaseOrInjury.name)
+                    .Select(x => x.diseaseOrInjury.name)
+                    .ToList()
             };
+        }
+
+        private static List<long> GetSelectedDiseaseOrInjuryIds(finalizarExamDto dto)
+        {
+            List<long> ids = dto.diseaseOrInjuryIds ?? new List<long>();
+
+            return ids
+                .Where(x => x > 0)
+                .Distinct()
+                .ToList();
         }
 
         private async Task<string> GetLastExamStatus(long examId)

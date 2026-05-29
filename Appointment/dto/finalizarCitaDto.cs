@@ -6,9 +6,8 @@ namespace project.Appointment.dto
     public class finalizarCitaDto
     {
         public long appointmentId { get; set; }
-        public string diagnosis { get; set; }
         public string? observations { get; set; }
-        public string treatment { get; set; }
+        public List<long> diseaseOrInjuryIds { get; set; } = new List<long>();
         public bool requiresRecipe { get; set; }
         public List<finalizarCitaRecipeDto> recipes { get; set; } = new List<finalizarCitaRecipeDto>();
         public bool requiresLabExams { get; set; }

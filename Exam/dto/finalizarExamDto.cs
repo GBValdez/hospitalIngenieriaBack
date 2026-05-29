@@ -10,5 +10,7 @@ namespace project.Exams.dto
         [Required(ErrorMessage = "El resultado es obligatorio.")]
         [StringLength(1000, ErrorMessage = "El resultado no puede superar 1000 caracteres.")]
         public string results { get; set; }
+
+        public List<long> diseaseOrInjuryIds { get; set; } = new List<long>();
     }
 }

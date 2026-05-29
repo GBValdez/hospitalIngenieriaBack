@@ -9,6 +9,7 @@ namespace fletesProyect.Medicine.dto
         public string appointmentReason { get; set; }
         public int patientId { get; set; }
         public string patientName { get; set; }
+        public string patientDpi { get; set; }
         public int doctorId { get; set; }
         public string doctorName { get; set; }
         public DateTime appointmentDate { get; set; }

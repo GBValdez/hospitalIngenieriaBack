@@ -31,8 +31,11 @@ namespace fletesProyect.Medicine
         }
 
         [HttpGet("receta/{id}")]
-        public async Task<ActionResult<recetaDespachoDto>> ObtenerReceta(long id)
+        public async Task<ActionResult<recetaDespachoDto>> ObtenerReceta(long id, [FromQuery] string dpi)
         {
+            if (string.IsNullOrWhiteSpace(dpi))
+                return BadRequest(new errorMessageDto("Debe ingresar el DPI del paciente."));
+
             var appointment = await context.Appointments
                 .Include(x => x.patient)
                 .Include(x => x.doctor)
@@ -40,6 +43,9 @@ namespace fletesProyect.Medicine
 
             if (appointment == null)
                 return NotFound(new errorMessageDto("No se encontro la receta solicitada."));
+
+            if (appointment.patient?.dpi != dpi.Trim())
+                return NotFound(new errorMessageDto("No se encontro una receta para la cita y DPI ingresados."));
 
             List<recetaDespachoItemDto> medicines = await BuildRecipeItems(id);
             if (medicines.Count == 0)
@@ -51,6 +57,7 @@ namespace fletesProyect.Medicine
                 appointmentReason = appointment.reason,
                 patientId = appointment.patientId,
                 patientName = appointment.patient?.name,
+                patientDpi = appointment.patient?.dpi,
                 doctorId = appointment.doctorId,
                 doctorName = appointment.doctor?.name,
                 appointmentDate = appointment.startDate,
@@ -64,8 +71,19 @@ namespace fletesProyect.Medicine
             if (dto == null)
                 return BadRequest(new errorMessageDto("Debe enviar la informacion del despacho."));
 
+            if (string.IsNullOrWhiteSpace(dto.dpi))
+                return BadRequest(new errorMessageDto("Debe ingresar el DPI del paciente."));
+
             if (dto.items == null || dto.items.Count == 0)
                 return BadRequest(new errorMessageDto("Debe seleccionar al menos un medicamento."));
+
+            bool appointmentMatchesPatient = await context.Appointments
+                .Include(x => x.patient)
+                .AnyAsync(x => x.Id == dto.appointmentId
+                    && x.deleteAt == null
+                    && x.patient.dpi == dto.dpi.Trim());
+            if (!appointmentMatchesPatient)
+                return BadRequest(new errorMessageDto("La cita y el DPI del paciente no coinciden."));
 
             List<long> recipeIds = dto.items.Select(x => x.recipeId).Distinct().ToList();
             if (recipeIds.Count != dto.items.Count)

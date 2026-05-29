@@ -50,8 +50,17 @@ namespace project.utils.services
         {
             AppointmentModel appointment = await GetAppointmentWithClinicalData(appointmentId);
             List<string> lines = BuildAppointmentLines(appointment, "Finalizada");
-            lines.Add($"Diagnostico: {appointment.diagnosis}");
-            lines.Add($"Tratamiento: {appointment.treatment}");
+            lines.Add("# Diagnostico");
+            List<string> diagnoses = await context.AppointmentDiseaseOrInjuries
+                .Include(x => x.diseaseOrInjury)
+                .Where(x => x.appointmentId == appointment.Id && x.deleteAt == null)
+                .OrderBy(x => x.diseaseOrInjury.name)
+                .Select(x => x.diseaseOrInjury.name)
+                .ToListAsync();
+            if (diagnoses.Count > 0)
+                lines.Add($"Diagnosticos: {string.Join(", ", diagnoses)}");
+            else
+                lines.Add("Diagnosticos: Sin diagnosticos registrados");
             if (!string.IsNullOrWhiteSpace(appointment.observations))
                 lines.Add($"Observaciones: {appointment.observations}");
 
@@ -59,10 +68,12 @@ namespace project.utils.services
                 .Include(x => x.medicine)
                 .Where(x => x.appointmentId == appointment.Id && x.deleteAt == null)
                 .ToListAsync();
-            foreach (Recipe recipe in recipes)
+            if (recipes.Count > 0)
             {
-                lines.Add($"Receta No.: {recipe.Id}");
-                lines.Add($"Medicamento: {recipe.medicine.name} por {recipe.days} dias cada {recipe.timeLimit} horas");
+                lines.Add("# Receta medica");
+                lines.Add($"No. cita para despacho: {appointment.Id}");
+                foreach (Recipe recipe in recipes)
+                    lines.Add($"Medicamento: {recipe.medicine.name} - {recipe.days} dias, cada {recipe.timeLimit} horas");
             }
 
             List<ExamModel> exams = await context.Exams
@@ -71,14 +82,18 @@ namespace project.utils.services
                 .Where(x => x.appointmentId == appointment.Id && x.deleteAt == null)
                 .OrderBy(x => x.startDate)
                 .ToListAsync();
-            foreach (ExamModel exam in exams)
+            if (exams.Count > 0)
             {
-                lines.Add($"Examen No.: {exam.Id}");
-                lines.Add($"Tipo de examen: {exam.examType?.name}");
-                lines.Add($"Encargado: {exam.attendant?.name}");
-                lines.Add($"Horario de examen: {exam.startDate:yyyy-MM-dd HH:mm} UTC");
-                if (!string.IsNullOrWhiteSpace(exam.observations))
-                    lines.Add($"Indicaciones de examen: {exam.observations}");
+                lines.Add("# Examenes programados");
+                foreach (ExamModel exam in exams)
+                {
+                    lines.Add($"Examen No.: {exam.Id}");
+                    lines.Add($"Tipo de examen: {exam.examType?.name}");
+                    lines.Add($"Encargado: {exam.attendant?.name}");
+                    lines.Add($"Horario de examen: {exam.startDate:yyyy-MM-dd HH:mm} UTC");
+                    if (!string.IsNullOrWhiteSpace(exam.observations))
+                        lines.Add($"Indicaciones de examen: {exam.observations}");
+                }
             }
 
             await SendAppointmentEmail(
@@ -104,6 +119,15 @@ namespace project.utils.services
         {
             ExamModel exam = await GetExam(examId);
             List<string> lines = BuildExamLines(exam, "Finalizado");
+            List<string> diagnoses = await context.ExamDiseaseOrInjuries
+                .Include(x => x.diseaseOrInjury)
+                .Where(x => x.examId == exam.Id && x.deleteAt == null)
+                .OrderBy(x => x.diseaseOrInjury.name)
+                .Select(x => x.diseaseOrInjury.name)
+                .ToListAsync();
+            lines.Add("# Resultado");
+            if (diagnoses.Count > 0)
+                lines.Add($"Diagnosticos: {string.Join(", ", diagnoses)}");
             lines.Add($"Resultado: {exam.results}");
             if (!string.IsNullOrWhiteSpace(exam.observations))
                 lines.Add($"Observaciones: {exam.observations}");
@@ -204,9 +228,11 @@ namespace project.utils.services
         {
             return new List<string>
             {
+                "# Datos de la cita",
                 $"No. cita: {appointment.Id}",
                 $"Estado: {status}",
                 $"Paciente: {appointment.patient?.name}",
+                $"DPI paciente: {appointment.patient?.dpi}",
                 $"Doctor: {appointment.doctor?.name}",
                 $"Motivo: {appointment.reason}",
                 $"Fecha programada: {appointment.startDate:yyyy-MM-dd HH:mm} UTC"
@@ -217,9 +243,12 @@ namespace project.utils.services
         {
             return new List<string>
             {
+                "# Datos del examen",
                 $"No. examen: {exam.Id}",
+                $"No. cita: {exam.appointmentId}",
                 $"Estado: {status}",
                 $"Paciente: {exam.appointment?.patient?.name}",
+                $"DPI paciente: {exam.appointment?.patient?.dpi}",
                 $"Doctor: {exam.appointment?.doctor?.name}",
                 $"Tipo de examen: {exam.examType?.name}",
                 $"Encargado: {exam.attendant?.name}",
