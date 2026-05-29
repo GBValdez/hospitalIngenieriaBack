@@ -81,6 +81,12 @@ namespace project.Exams
             if (query?.patientId != null)
                 exams = exams.Where(x => x.appointment.patientId == query.patientId.Value);
 
+            if (!string.IsNullOrWhiteSpace(query?.dpi))
+            {
+                string dpi = query.dpi.Trim();
+                exams = exams.Where(x => x.appointment.patient.dpi == dpi);
+            }
+
             if (query?.doctorId != null)
                 exams = exams.Where(x => x.appointment.doctorId == query.doctorId.Value);
 

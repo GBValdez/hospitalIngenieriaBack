@@ -11,15 +11,18 @@ using fletesProyect.MedicineDiseaseOrInjuryDosage;
 using fletesProyect.Worker;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using project.Models;
 using project.utils;
 using project.utils.dto;
 using project.utils.services;
+using project.users;
 using project.Appointment.dto;
 using AppointmentModel = fletesProyect.Appointment.Appointment;
 using ExamModel = fletesProyect.Exam.Exam;
+using PatientModel = fletesProyect.Patient.Patient;
 using RecipeModel = fletesProyect.Recipe.Recipe;
 
 namespace project.Appointment
@@ -35,14 +38,17 @@ namespace project.Appointment
         private const string StatusEnCurso = "EN_CURSO";
         private const string StatusFinalizada = "FINALIZADA";
         private readonly clinicalNotificationService notificationService;
+        private readonly UserManager<userEntity> userManager;
         protected override bool showDeleted { get; set; } = true;
 
         public citasController(
             DBProyContext context,
             IMapper mapper,
-            clinicalNotificationService notificationService) : base(context, mapper)
+            clinicalNotificationService notificationService,
+            UserManager<userEntity> userManager) : base(context, mapper)
         {
             this.notificationService = notificationService;
+            this.userManager = userManager;
         }
 
         protected override async Task<IQueryable<AppointmentModel>> modifyGet(IQueryable<AppointmentModel> query, citaQueryDto queryParams)
@@ -54,7 +60,7 @@ namespace project.Appointment
             if (queryParams == null)
                 return query;
 
-            if (!User.IsInRole("ADMINISTRATOR"))
+            if (!User.IsInRole("ADMINISTRATOR") && !User.IsInRole("NURSE"))
             {
                 if (User.IsInRole("userNormal"))
                 {
@@ -73,6 +79,12 @@ namespace project.Appointment
 
             if (queryParams.patientId.HasValue)
                 query = query.Where(x => x.patientId == queryParams.patientId.Value);
+
+            if (!string.IsNullOrWhiteSpace(queryParams.dpi))
+            {
+                string dpi = queryParams.dpi.Trim();
+                query = query.Where(x => x.patient.dpi == dpi);
+            }
 
             if (!string.IsNullOrWhiteSpace(queryParams.estado))
             {
@@ -358,6 +370,95 @@ namespace project.Appointment
                 $"Inicio de cita registrado el {appointment.arrivalDate:yyyy-MM-dd HH:mm} UTC.");
             await context.SaveChangesAsync();
 
+            return mapper.Map<citaDto>(appointment);
+        }
+
+        [HttpGet("paciente-por-dpi/{dpi}")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "NURSE,ADMINISTRATOR")]
+        public async Task<ActionResult<emergenciaPacienteResultadoDto>> BuscarPacientePorDpi(string dpi)
+        {
+            if (string.IsNullOrWhiteSpace(dpi))
+                return BadRequest(new errorMessageDto("El DPI es obligatorio."));
+
+            string cleanDpi = dpi.Trim();
+            if (cleanDpi.Length != 13)
+                return BadRequest(new errorMessageDto("El DPI debe tener 13 caracteres."));
+
+            PatientModel patient = await context.Patients
+                .FirstOrDefaultAsync(x => x.dpi == cleanDpi && x.deleteAt == null);
+
+            if (patient == null)
+                return NotFound();
+
+            return new emergenciaPacienteResultadoDto
+            {
+                id = patient.Id,
+                name = patient.name,
+                dpi = patient.dpi,
+                direction = patient.direction,
+                birthday = patient.birthday,
+                sexId = patient.sexId,
+                nationalityId = patient.nationalityId
+            };
+        }
+
+        [HttpPost("emergencia")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "NURSE,ADMINISTRATOR")]
+        public async Task<ActionResult<citaDto>> AtenderEmergencia([FromBody] emergenciaCitaDto dto)
+        {
+            if (dto == null)
+                return BadRequest(new errorMessageDto("Debe enviar la informacion de la emergencia."));
+
+            if (string.IsNullOrWhiteSpace(dto.dpi))
+                return BadRequest(new errorMessageDto("El DPI es obligatorio."));
+
+            string dpi = dto.dpi.Trim();
+            if (dpi.Length != 13)
+                return BadRequest(new errorMessageDto("El DPI debe tener 13 caracteres."));
+
+            if (string.IsNullOrWhiteSpace(dto.reason))
+                return BadRequest(new errorMessageDto("El motivo de emergencia es obligatorio."));
+
+            PatientModel patient = await context.Patients
+                .FirstOrDefaultAsync(x => x.dpi == dpi && x.deleteAt == null);
+            if (patient == null)
+            {
+                errorMessageDto patientError = await ValidateEmergencyPatient(dto.patient);
+                if (patientError != null)
+                    return BadRequest(patientError);
+
+                patient = await CreateEmergencyPatient(dpi, dto.patient);
+            }
+
+            DateTime now = DateTime.UtcNow;
+            DateTime endDate = now.AddMinutes(30);
+            long doctorId = await ObtenerDoctorDisponible(now, endDate);
+            if (doctorId == 0)
+                return BadRequest(new errorMessageDto("No hay medicos disponibles para atender la emergencia."));
+
+            AppointmentModel appointment = new AppointmentModel
+            {
+                reason = dto.reason.Trim(),
+                isEmergency = true,
+                scheduledDate = now,
+                startDate = now,
+                endDate = null,
+                arrivalDate = now,
+                doctorId = (int)doctorId,
+                patientId = (int)patient.Id,
+                createAt = now
+            };
+            context.Appointments.Add(appointment);
+            context.Entry(appointment).Property("doctorId1").CurrentValue = doctorId;
+            context.Entry(appointment).Property("patientId1").CurrentValue = patient.Id;
+            await context.SaveChangesAsync();
+
+            await AddStatusHistory(appointment.Id, null, StatusEnCurso, "Emergencia registrada e iniciada.");
+            await context.SaveChangesAsync();
+
+            appointment.doctor = await context.Workers.FirstOrDefaultAsync(x => x.Id == doctorId);
+            appointment.patient = patient;
+            appointment.currentStatus = StatusEnCurso;
             return mapper.Map<citaDto>(appointment);
         }
 
@@ -844,6 +945,60 @@ namespace project.Appointment
                 return new errorMessageDto("La talla debe ser un valor numerico mayor a cero.");
 
             return null;
+        }
+
+        private async Task<errorMessageDto> ValidateEmergencyPatient(emergenciaPacienteDto patient)
+        {
+            if (patient == null)
+                return new errorMessageDto("El paciente no existe. Debe enviar los datos para registrarlo.");
+
+            if (string.IsNullOrWhiteSpace(patient.name))
+                return new errorMessageDto("El nombre del paciente es obligatorio.");
+
+            if (string.IsNullOrWhiteSpace(patient.direction))
+                return new errorMessageDto("La direccion del paciente es obligatoria.");
+
+            bool sexExists = await context.Sexs.AnyAsync(x => x.Id == patient.sexId && x.deleteAt == null);
+            if (!sexExists)
+                return new errorMessageDto("El sexo seleccionado no existe.");
+
+            bool nationalityExists = await context.Nationalities.AnyAsync(x => x.Id == patient.nationalityId && x.deleteAt == null);
+            if (!nationalityExists)
+                return new errorMessageDto("La nacionalidad seleccionada no existe.");
+
+            return null;
+        }
+
+        private async Task<PatientModel> CreateEmergencyPatient(string dpi, emergenciaPacienteDto dto)
+        {
+            string suffix = Guid.NewGuid().ToString("N")[..12];
+            userEntity user = new userEntity
+            {
+                UserName = $"emergencia_{dpi}_{suffix}",
+                Email = $"emergencia_{dpi}_{suffix}@hospital.local",
+                EmailConfirmed = true,
+                PhoneNumber = "00000000",
+                createAt = DateTime.UtcNow
+            };
+
+            IdentityResult result = await userManager.CreateAsync(user, $"Emergencia@{suffix}1");
+            if (!result.Succeeded)
+                throw new InvalidOperationException(result.Errors.FirstOrDefault()?.Description ?? "No se pudo registrar el usuario temporal.");
+
+            PatientModel patient = new PatientModel
+            {
+                name = dto.name.Trim(),
+                dpi = dpi,
+                direction = dto.direction.Trim(),
+                birthday = dto.birthday,
+                sexId = dto.sexId,
+                nationalityId = dto.nationalityId,
+                userId = user.Id,
+                createAt = DateTime.UtcNow
+            };
+            context.Patients.Add(patient);
+            await context.SaveChangesAsync();
+            return patient;
         }
 
         private static int CalculatePrescribedAmount(int days, int timeLimit)

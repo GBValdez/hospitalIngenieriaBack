@@ -70,6 +70,11 @@ public partial class DBProyContext : IdentityDbContext<userEntity, rolEntity, st
             .HasIndex(x => x.medicineId)
             .IsUnique();
 
+        modelBuilder.Entity<Patient>()
+            .HasIndex(x => x.dpi)
+            .IsUnique()
+            .HasFilter("\"deleteAt\" IS NULL");
+
         modelBuilder.Entity<MedicineDiseaseOrInjuryDosage>()
             .HasIndex(x => new { x.medicineId, x.diseaseOrInjuryId })
             .IsUnique()

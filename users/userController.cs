@@ -114,6 +114,8 @@ namespace project.users
         [AllowAnonymous]
         public async Task<IActionResult> register(clientCreationDto newCliente)
         {
+            if (await context.Patients.AnyAsync(x => x.dpi == newCliente.dpi.Trim() && x.deleteAt == null))
+                return BadRequest(new errorMessageDto("El DPI ya esta registrado."));
 
             userCreationDto credentials = mapper.Map<userCreationDto>(newCliente);
             errorMessageDto error = await userSvc.register(credentials, new List<string> { "userNormal", "ADMINISTRATOR" });
