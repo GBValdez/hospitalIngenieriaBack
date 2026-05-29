@@ -29,6 +29,8 @@ builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<interceptorDb>();
 builder.Services.AddScoped<emailService>();
+builder.Services.AddScoped<simplePdfService>();
+builder.Services.AddScoped<clinicalNotificationService>();
 builder.Services.AddScoped<userSvc>();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddDbContext<DBProyContext>((serviceProvider, options) =>

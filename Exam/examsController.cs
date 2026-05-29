@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using project.Exams.dto;
 using project.Models;
 using project.utils.dto;
+using project.utils.services;
 using ExamModel = fletesProyect.Exam.Exam;
 
 namespace project.Exams
@@ -24,10 +25,14 @@ namespace project.Exams
         private const string StatusEnCurso = "EN_CURSO";
         private const string StatusFinalizada = "FINALIZADA";
         private readonly DBProyContext context;
+        private readonly clinicalNotificationService notificationService;
 
-        public examsController(DBProyContext context)
+        public examsController(
+            DBProyContext context,
+            clinicalNotificationService notificationService)
         {
             this.context = context;
+            this.notificationService = notificationService;
         }
 
         [HttpGet]
@@ -189,6 +194,7 @@ namespace project.Exams
             exam.results = dto.results.Trim();
             await AddExamStatusHistory(exam.Id, currentStatus, StatusFinalizada, "Examen finalizado.");
             await context.SaveChangesAsync();
+            await TrySendNotification(() => notificationService.SendExamFinalized(exam.Id));
 
             return MapExam(exam, StatusFinalizada);
         }
@@ -349,6 +355,18 @@ namespace project.Exams
                 return dateTime.ToUniversalTime();
 
             return DateTime.SpecifyKind(dateTime, DateTimeKind.Local).ToUniversalTime();
+        }
+
+        private static async Task TrySendNotification(Func<Task> notification)
+        {
+            try
+            {
+                await notification();
+            }
+            catch
+            {
+                // El correo no debe bloquear la operacion principal.
+            }
         }
     }
 }

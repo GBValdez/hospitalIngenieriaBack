@@ -14,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using project.Models;
 using project.utils;
 using project.utils.dto;
+using project.utils.services;
 using project.Appointment.dto;
 using AppointmentModel = fletesProyect.Appointment.Appointment;
 using ExamModel = fletesProyect.Exam.Exam;
@@ -31,10 +32,15 @@ namespace project.Appointment
         private const string StatusCancelar = "CANCELAR";
         private const string StatusEnCurso = "EN_CURSO";
         private const string StatusFinalizada = "FINALIZADA";
+        private readonly clinicalNotificationService notificationService;
         protected override bool showDeleted { get; set; } = true;
 
-        public citasController(DBProyContext context, IMapper mapper) : base(context, mapper)
+        public citasController(
+            DBProyContext context,
+            IMapper mapper,
+            clinicalNotificationService notificationService) : base(context, mapper)
         {
+            this.notificationService = notificationService;
         }
 
         protected override async Task<IQueryable<AppointmentModel>> modifyGet(IQueryable<AppointmentModel> query, citaQueryDto queryParams)
@@ -151,6 +157,7 @@ namespace project.Appointment
         {
             await AddStatusHistory(entity.Id, null, StatusActivo, "Cita agendada.");
             await context.SaveChangesAsync();
+            await TrySendNotification(() => notificationService.SendAppointmentScheduled(entity.Id));
         }
 
         [HttpGet("{id}/historial-estados")]
@@ -291,6 +298,7 @@ namespace project.Appointment
             appointment.scheduledDate = newStartDate;
             await AddStatusHistory(appointment.Id, await GetLastAppointmentStatus(appointment.Id), StatusReagendar, "Cita reagendada.");
             await context.SaveChangesAsync();
+            await TrySendNotification(() => notificationService.SendAppointmentRescheduled(appointment.Id));
             return Ok();
         }
 
@@ -405,6 +413,7 @@ namespace project.Appointment
                         null,
                         StatusActivo,
                         "Examen programado al finalizar consulta.");
+                    await TrySendNotification(() => notificationService.SendExamScheduled(createdExam.Id));
                 }
             }
 
@@ -428,10 +437,12 @@ namespace project.Appointment
                 context.Entry(newAppointment).Property("patientId1").CurrentValue = (long)appointment.patientId;
                 await context.SaveChangesAsync();
                 await AddStatusHistory(newAppointment.Id, null, StatusActivo, "Cita de seguimiento agendada al finalizar consulta.");
+                await TrySendNotification(() => notificationService.SendAppointmentScheduled(newAppointment.Id));
             }
 
             await AddStatusHistory(appointment.Id, previousStatus, StatusFinalizada, "Cita finalizada.");
             await context.SaveChangesAsync();
+            await TrySendNotification(() => notificationService.SendAppointmentFinalized(appointment.Id));
             appointment.currentStatus = StatusFinalizada;
             return mapper.Map<citaDto>(appointment);
         }
@@ -854,6 +865,18 @@ namespace project.Appointment
                 return dateTime.ToUniversalTime();
 
             return DateTime.SpecifyKind(dateTime, DateTimeKind.Local).ToUniversalTime();
+        }
+
+        private static async Task TrySendNotification(Func<Task> notification)
+        {
+            try
+            {
+                await notification();
+            }
+            catch
+            {
+                // El correo no debe bloquear la operacion principal.
+            }
         }
 
         private class LabExamScheduleSlot

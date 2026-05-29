@@ -193,6 +193,7 @@ namespace fletesProyect.Medicine
         }
 
         [HttpGet("movimientos")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "ADMINISTRATOR")]
         public async Task<ActionResult<List<inventarioMovimientoDto>>> GetMovimientos([FromQuery] long? medicineId)
         {
             var query = context.MedicineInventoryMovements

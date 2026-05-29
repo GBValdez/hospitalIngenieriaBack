@@ -21,6 +21,14 @@ namespace project.utils.services
             emailMessage.Subject = emailData.subject;
 
             BodyBuilder bodyBuilder = new BodyBuilder { HtmlBody = emailData.message };
+            foreach (emailAttachmentDto attachment in emailData.attachments)
+            {
+                bodyBuilder.Attachments.Add(
+                    attachment.fileName,
+                    attachment.content,
+                    ContentType.Parse(attachment.contentType));
+            }
+
             emailMessage.Body = bodyBuilder.ToMessageBody();
 
             using (var client = new SmtpClient())
