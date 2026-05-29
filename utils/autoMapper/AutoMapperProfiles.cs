@@ -29,8 +29,11 @@ namespace project.utils.autoMapper
             CreateMap<Catalogue, catalogueDto>();
             CreateMap<catalogueCreationDto, Catalogue>();
             CreateMap<AppointmentModel, citaDto>()
-                .ForMember(dest => dest.status, opt => opt.MapFrom(src => src.deleteAt == null ? "ACTIVO" : "CANCELADO"));
-            CreateMap<citaCreationDto, AppointmentModel>();
+                .ForMember(dest => dest.doctorName, opt => opt.MapFrom(src => src.doctor != null ? src.doctor.name : null))
+                .ForMember(dest => dest.patientName, opt => opt.MapFrom(src => src.patient != null ? src.patient.name : null))
+                .ForMember(dest => dest.status, opt => opt.MapFrom(src => !string.IsNullOrWhiteSpace(src.currentStatus) ? src.currentStatus : src.deleteAt == null ? "ACTIVO" : "CANCELADO"));
+            CreateMap<citaAgendarDto, AppointmentModel>();
+            CreateMap<citaAtencionDto, AppointmentModel>();
 
         }
 

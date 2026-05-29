@@ -6,6 +6,6 @@ namespace project.Appointment.dto
     {
         public long? citaId { get; set; }
         public DateTime newStartDate { get; set; }
-        public DateTime newEndDate { get; set; }
+        public DateTime? newEndDate { get; set; }
     }
 }

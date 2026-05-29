@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using project.Models;
@@ -11,9 +12,11 @@ using project.Models;
 namespace fletesProyect.Migrations
 {
     [DbContext(typeof(DBProyContext))]
-    partial class DBProyContextModelSnapshot : ModelSnapshot
+    [Migration("20260529080225_add_laboratory_attendant_exam_types")]
+    partial class add_laboratory_attendant_exam_types
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -170,10 +173,8 @@ namespace fletesProyect.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<DateTime?>("arrivalDate")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("bloodPressure")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("createAt")
@@ -183,6 +184,7 @@ namespace fletesProyect.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("diagnosis")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int>("doctorId")
@@ -191,7 +193,7 @@ namespace fletesProyect.Migrations
                     b.Property<long>("doctorId1")
                         .HasColumnType("bigint");
 
-                    b.Property<DateTime?>("endDate")
+                    b.Property<DateTime>("endDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<float>("heartRate")
@@ -204,6 +206,7 @@ namespace fletesProyect.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("observations")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<float>("oxygenSaturation")
@@ -232,6 +235,7 @@ namespace fletesProyect.Migrations
                         .HasColumnType("real");
 
                     b.Property<string>("treatment")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("updateAt")
@@ -252,59 +256,6 @@ namespace fletesProyect.Migrations
                     b.HasIndex("userUpdateId");
 
                     b.ToTable("Appointments");
-                });
-
-            modelBuilder.Entity("fletesProyect.AppointmentStatusHistory.AppointmentStatusHistory", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<long>("appointmentId")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime>("changedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("changedByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("comment")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("createAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("deleteAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long?>("previousStatusId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("statusId")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime?>("updateAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("userUpdateId")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("appointmentId");
-
-                    b.HasIndex("changedByUserId");
-
-                    b.HasIndex("previousStatusId");
-
-                    b.HasIndex("statusId");
-
-                    b.HasIndex("userUpdateId");
-
-                    b.ToTable("AppointmentStatusHistories");
                 });
 
             modelBuilder.Entity("fletesProyect.Dispatch.Dispatch", b =>
@@ -437,59 +388,6 @@ namespace fletesProyect.Migrations
                     b.HasIndex("userUpdateId");
 
                     b.ToTable("Exams");
-                });
-
-            modelBuilder.Entity("fletesProyect.ExamStatusHistory.ExamStatusHistory", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime>("changedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("changedByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("comment")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("createAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("deleteAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long>("examId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long?>("previousStatusId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("statusId")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime?>("updateAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("userUpdateId")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("changedByUserId");
-
-                    b.HasIndex("examId");
-
-                    b.HasIndex("previousStatusId");
-
-                    b.HasIndex("statusId");
-
-                    b.HasIndex("userUpdateId");
-
-                    b.ToTable("ExamStatusHistories");
                 });
 
             modelBuilder.Entity("fletesProyect.LaboratoryAttendantExamType.LaboratoryAttendantExamType", b =>
@@ -731,40 +629,6 @@ namespace fletesProyect.Migrations
                     b.HasIndex("userUpdateId");
 
                     b.ToTable("Workers");
-                });
-
-            modelBuilder.Entity("fletesProyect.catalogues.AppointmentStatus", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime?>("createAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("deleteAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("description")
-                        .HasColumnType("text");
-
-                    b.Property<string>("name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("updateAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("userUpdateId")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("userUpdateId");
-
-                    b.ToTable("AppointmentStatuses");
                 });
 
             modelBuilder.Entity("fletesProyect.catalogues.ExamType", b =>
@@ -1195,43 +1059,6 @@ namespace fletesProyect.Migrations
                     b.Navigation("userUpdate");
                 });
 
-            modelBuilder.Entity("fletesProyect.AppointmentStatusHistory.AppointmentStatusHistory", b =>
-                {
-                    b.HasOne("fletesProyect.Appointment.Appointment", "appointment")
-                        .WithMany()
-                        .HasForeignKey("appointmentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("project.users.userEntity", "changedByUser")
-                        .WithMany()
-                        .HasForeignKey("changedByUserId");
-
-                    b.HasOne("fletesProyect.catalogues.AppointmentStatus", "previousStatus")
-                        .WithMany()
-                        .HasForeignKey("previousStatusId");
-
-                    b.HasOne("fletesProyect.catalogues.AppointmentStatus", "status")
-                        .WithMany()
-                        .HasForeignKey("statusId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("project.users.userEntity", "userUpdate")
-                        .WithMany()
-                        .HasForeignKey("userUpdateId");
-
-                    b.Navigation("appointment");
-
-                    b.Navigation("changedByUser");
-
-                    b.Navigation("previousStatus");
-
-                    b.Navigation("status");
-
-                    b.Navigation("userUpdate");
-                });
-
             modelBuilder.Entity("fletesProyect.Dispatch.Dispatch", b =>
                 {
                     b.HasOne("fletesProyect.Recipe.Recipe", "recipe")
@@ -1303,43 +1130,6 @@ namespace fletesProyect.Migrations
                     b.Navigation("attendant");
 
                     b.Navigation("examType");
-
-                    b.Navigation("userUpdate");
-                });
-
-            modelBuilder.Entity("fletesProyect.ExamStatusHistory.ExamStatusHistory", b =>
-                {
-                    b.HasOne("project.users.userEntity", "changedByUser")
-                        .WithMany()
-                        .HasForeignKey("changedByUserId");
-
-                    b.HasOne("fletesProyect.Exam.Exam", "exam")
-                        .WithMany()
-                        .HasForeignKey("examId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("fletesProyect.catalogues.AppointmentStatus", "previousStatus")
-                        .WithMany()
-                        .HasForeignKey("previousStatusId");
-
-                    b.HasOne("fletesProyect.catalogues.AppointmentStatus", "status")
-                        .WithMany()
-                        .HasForeignKey("statusId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("project.users.userEntity", "userUpdate")
-                        .WithMany()
-                        .HasForeignKey("userUpdateId");
-
-                    b.Navigation("changedByUser");
-
-                    b.Navigation("exam");
-
-                    b.Navigation("previousStatus");
-
-                    b.Navigation("status");
 
                     b.Navigation("userUpdate");
                 });
@@ -1473,15 +1263,6 @@ namespace fletesProyect.Migrations
                     b.Navigation("sex");
 
                     b.Navigation("user");
-
-                    b.Navigation("userUpdate");
-                });
-
-            modelBuilder.Entity("fletesProyect.catalogues.AppointmentStatus", b =>
-                {
-                    b.HasOne("project.users.userEntity", "userUpdate")
-                        .WithMany()
-                        .HasForeignKey("userUpdateId");
 
                     b.Navigation("userUpdate");
                 });

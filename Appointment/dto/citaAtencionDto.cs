@@ -1,14 +1,7 @@
-using System;
-
 namespace project.Appointment.dto
 {
-    public class citaCreationDto
+    public class citaAtencionDto
     {
-        public DateTime? scheduledDate { get; set; }
-        public string reason { get; set; }
-        public bool isEmergency { get; set; }
-        public DateTime startDate { get; set; }
-        public DateTime endDate { get; set; }
         public string? bloodPressure { get; set; }
         public string? diagnosis { get; set; }
         public string? observations { get; set; }
@@ -19,7 +12,5 @@ namespace project.Appointment.dto
         public float oxygenSaturation { get; set; }
         public float weight { get; set; }
         public float height { get; set; }
-        public int doctorId { get; set; }
-        public int patientId { get; set; }
     }
 }

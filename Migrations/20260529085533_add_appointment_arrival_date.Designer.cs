@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using project.Models;
@@ -11,9 +12,11 @@ using project.Models;
 namespace fletesProyect.Migrations
 {
     [DbContext(typeof(DBProyContext))]
-    partial class DBProyContextModelSnapshot : ModelSnapshot
+    [Migration("20260529085533_add_appointment_arrival_date")]
+    partial class add_appointment_arrival_date
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -170,9 +173,6 @@ namespace fletesProyect.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<DateTime?>("arrivalDate")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("bloodPressure")
                         .HasColumnType("text");
 
@@ -191,7 +191,7 @@ namespace fletesProyect.Migrations
                     b.Property<long>("doctorId1")
                         .HasColumnType("bigint");
 
-                    b.Property<DateTime?>("endDate")
+                    b.Property<DateTime>("endDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<float>("heartRate")
@@ -221,6 +221,9 @@ namespace fletesProyect.Migrations
 
                     b.Property<float>("respiratoryRate")
                         .HasColumnType("real");
+
+                    b.Property<DateTime?>("arrivalDate")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("scheduledDate")
                         .HasColumnType("timestamp with time zone");
@@ -437,59 +440,6 @@ namespace fletesProyect.Migrations
                     b.HasIndex("userUpdateId");
 
                     b.ToTable("Exams");
-                });
-
-            modelBuilder.Entity("fletesProyect.ExamStatusHistory.ExamStatusHistory", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime>("changedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("changedByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("comment")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("createAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("deleteAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long>("examId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long?>("previousStatusId")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("statusId")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime?>("updateAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("userUpdateId")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("changedByUserId");
-
-                    b.HasIndex("examId");
-
-                    b.HasIndex("previousStatusId");
-
-                    b.HasIndex("statusId");
-
-                    b.HasIndex("userUpdateId");
-
-                    b.ToTable("ExamStatusHistories");
                 });
 
             modelBuilder.Entity("fletesProyect.LaboratoryAttendantExamType.LaboratoryAttendantExamType", b =>
@@ -1303,43 +1253,6 @@ namespace fletesProyect.Migrations
                     b.Navigation("attendant");
 
                     b.Navigation("examType");
-
-                    b.Navigation("userUpdate");
-                });
-
-            modelBuilder.Entity("fletesProyect.ExamStatusHistory.ExamStatusHistory", b =>
-                {
-                    b.HasOne("project.users.userEntity", "changedByUser")
-                        .WithMany()
-                        .HasForeignKey("changedByUserId");
-
-                    b.HasOne("fletesProyect.Exam.Exam", "exam")
-                        .WithMany()
-                        .HasForeignKey("examId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("fletesProyect.catalogues.AppointmentStatus", "previousStatus")
-                        .WithMany()
-                        .HasForeignKey("previousStatusId");
-
-                    b.HasOne("fletesProyect.catalogues.AppointmentStatus", "status")
-                        .WithMany()
-                        .HasForeignKey("statusId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("project.users.userEntity", "userUpdate")
-                        .WithMany()
-                        .HasForeignKey("userUpdateId");
-
-                    b.Navigation("changedByUser");
-
-                    b.Navigation("exam");
-
-                    b.Navigation("previousStatus");
-
-                    b.Navigation("status");
 
                     b.Navigation("userUpdate");
                 });

@@ -337,6 +337,9 @@ namespace project.Doctors
             if (minimumAdultDate > today)
                 return new errorMessageDto("El doctor debe ser mayor de edad.");
 
+            if (hiringDateOnly > today)
+                return new errorMessageDto("La fecha de contratacion no puede ser mayor a la fecha actual.");
+
             if (hiringDateOnly < minimumAdultDate)
                 return new errorMessageDto("La fecha de contratacion debe ser al menos 18 anios despues de la fecha de nacimiento.");
 
