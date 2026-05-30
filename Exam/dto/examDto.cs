@@ -15,7 +15,7 @@ namespace project.Exams.dto
         public string appointmentReason { get; set; }
         public long attendantId { get; set; }
         public string attendantName { get; set; }
-        public int doctorId { get; set; }
+        public int? doctorId { get; set; }
         public string doctorName { get; set; }
         public int patientId { get; set; }
         public string patientName { get; set; }

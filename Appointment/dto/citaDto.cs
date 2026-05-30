@@ -23,7 +23,7 @@ namespace project.Appointment.dto
         public float oxygenSaturation { get; set; }
         public float weight { get; set; }
         public float height { get; set; }
-        public int doctorId { get; set; }
+        public int? doctorId { get; set; }
         public int patientId { get; set; }
         public string? doctorName { get; set; }
         public string? patientName { get; set; }

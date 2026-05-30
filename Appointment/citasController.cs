@@ -33,6 +33,7 @@ namespace project.Appointment
     public class citasController : controllerCommons<AppointmentModel, citaAgendarDto, citaDto, citaQueryDto, object, long>
     {
         private const string StatusActivo = "ACTIVO";
+        private const string StatusEnEspera = "EN_ESPERA";
         private const string StatusReagendar = "REAGENDAR";
         private const string StatusCancelar = "CANCELAR";
         private const string StatusEnCurso = "EN_CURSO";
@@ -320,7 +321,7 @@ namespace project.Appointment
             bool conflict = await ObtenerDoctorDisponible(
                 newStartDate,
                 validationEndDate,
-                appointment.doctorId,
+                appointment.doctorId ?? 0,
                 appointment.Id) == 0;
 
             if (conflict)
@@ -459,6 +460,54 @@ namespace project.Appointment
             appointment.doctor = await context.Workers.FirstOrDefaultAsync(x => x.Id == doctorId);
             appointment.patient = patient;
             appointment.currentStatus = StatusEnCurso;
+            return mapper.Map<citaDto>(appointment);
+        }
+
+        [HttpPost("presencial")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "NURSE,ADMINISTRATOR")]
+        public async Task<ActionResult<citaDto>> RegistrarCitaPresencial([FromBody] citaPresencialDto dto)
+        {
+            if (dto == null)
+                return BadRequest(new errorMessageDto("Debe enviar la informacion de la cita presencial."));
+
+            if (string.IsNullOrWhiteSpace(dto.dpi))
+                return BadRequest(new errorMessageDto("El DPI es obligatorio."));
+
+            string dpi = dto.dpi.Trim();
+            if (dpi.Length != 13)
+                return BadRequest(new errorMessageDto("El DPI debe tener 13 caracteres."));
+
+            if (string.IsNullOrWhiteSpace(dto.reason))
+                return BadRequest(new errorMessageDto("El motivo de la cita es obligatorio."));
+
+            PatientModel patient = await context.Patients
+                .FirstOrDefaultAsync(x => x.dpi == dpi && x.deleteAt == null);
+            if (patient == null)
+                return BadRequest(new errorMessageDto("El paciente no existe. Debe registrarse desde el formulario de registro del login."));
+
+            DateTime now = DateTime.UtcNow;
+            AppointmentModel appointment = new AppointmentModel
+            {
+                reason = dto.reason.Trim(),
+                isEmergency = false,
+                scheduledDate = now,
+                startDate = now,
+                endDate = null,
+                arrivalDate = now,
+                doctorId = null,
+                patientId = (int)patient.Id,
+                createAt = now
+            };
+            context.Appointments.Add(appointment);
+            context.Entry(appointment).Property("doctorId1").CurrentValue = null;
+            context.Entry(appointment).Property("patientId1").CurrentValue = patient.Id;
+            await context.SaveChangesAsync();
+
+            await AddStatusHistory(appointment.Id, null, StatusEnEspera, "Cita presencial registrada; paciente en espera.");
+            await context.SaveChangesAsync();
+
+            appointment.patient = patient;
+            appointment.currentStatus = StatusEnEspera;
             return mapper.Map<citaDto>(appointment);
         }
 
@@ -712,7 +761,19 @@ namespace project.Appointment
                 .Where(doctor => !context.Set<AppointmentModel>()
                     .Any(cita => (!excludeAppointmentId.HasValue || cita.Id != excludeAppointmentId.Value)
                         && cita.doctorId == doctor.Id && cita.deleteAt == null
-                        && cita.startDate < fechaFin && (cita.endDate ?? cita.startDate.AddMinutes(30)) > fechaInicio))
+                        && cita.startDate < fechaFin
+                        && (cita.endDate > fechaInicio
+                            || (cita.endDate == null && context.AppointmentStatusHistories
+                                .Where(h => h.appointmentId == cita.Id && h.deleteAt == null)
+                                .OrderByDescending(h => h.changedAt)
+                                .Select(h => h.status.name)
+                                .FirstOrDefault() == StatusEnCurso)
+                            || (cita.endDate == null && context.AppointmentStatusHistories
+                                .Where(h => h.appointmentId == cita.Id && h.deleteAt == null)
+                                .OrderByDescending(h => h.changedAt)
+                                .Select(h => h.status.name)
+                                .FirstOrDefault() != StatusEnCurso
+                                && cita.startDate.AddMinutes(30) > fechaInicio))))
                 .OrderBy(x => x.Id)
                 .Select(x => x.Id)
                 .FirstOrDefaultAsync();
@@ -768,6 +829,54 @@ namespace project.Appointment
             return suggestions;
         }
 
+        private async Task<AppointmentAvailabilitySuggestion> GetNextAvailableAppointmentSlot(DateTime requestedStartDate, int patientId)
+        {
+            const int appointmentDurationMinutes = 30;
+            const int slotStepMinutes = 30;
+            const int searchHorizonDays = 14;
+
+            DateTime now = ToUtc(requestedStartDate);
+            DateTime nowEnd = now.AddMinutes(appointmentDurationMinutes);
+            if (!await HasPatientAppointmentConflict(patientId, now, nowEnd))
+            {
+                long immediateDoctorId = await ObtenerDoctorDisponible(now, nowEnd);
+                if (immediateDoctorId != 0)
+                {
+                    return new AppointmentAvailabilitySuggestion
+                    {
+                        startDate = now,
+                        endDate = nowEnd,
+                        doctorId = immediateDoctorId
+                    };
+                }
+            }
+
+            DateTime firstSlotStart = RoundUpToSlot(now, slotStepMinutes);
+            if (firstSlotStart <= now)
+                firstSlotStart = firstSlotStart.AddMinutes(slotStepMinutes);
+
+            DateTime searchLimit = firstSlotStart.AddDays(searchHorizonDays);
+            for (DateTime slotStart = firstSlotStart; slotStart < searchLimit; slotStart = slotStart.AddMinutes(slotStepMinutes))
+            {
+                DateTime slotEnd = slotStart.AddMinutes(appointmentDurationMinutes);
+                if (await HasPatientAppointmentConflict(patientId, slotStart, slotEnd))
+                    continue;
+
+                long doctorId = await ObtenerDoctorDisponible(slotStart, slotEnd);
+                if (doctorId == 0)
+                    continue;
+
+                return new AppointmentAvailabilitySuggestion
+                {
+                    startDate = slotStart,
+                    endDate = slotEnd,
+                    doctorId = doctorId
+                };
+            }
+
+            return null;
+        }
+
         private async Task<bool> HasPatientAppointmentConflict(
             int patientId,
             DateTime startDate,
@@ -782,7 +891,18 @@ namespace project.Appointment
                     && x.patientId == patientId
                     && x.deleteAt == null
                     && x.startDate < endDate
-                    && (x.endDate ?? x.startDate.AddMinutes(30)) > startDate);
+                    && (x.endDate > startDate
+                        || (x.endDate == null && context.AppointmentStatusHistories
+                            .Where(h => h.appointmentId == x.Id && h.deleteAt == null)
+                            .OrderByDescending(h => h.changedAt)
+                            .Select(h => h.status.name)
+                            .FirstOrDefault() == StatusEnCurso)
+                        || (x.endDate == null && context.AppointmentStatusHistories
+                            .Where(h => h.appointmentId == x.Id && h.deleteAt == null)
+                            .OrderByDescending(h => h.changedAt)
+                            .Select(h => h.status.name)
+                            .FirstOrDefault() != StatusEnCurso
+                            && x.startDate.AddMinutes(30) > startDate)));
         }
 
         private async Task<errorMessageDto> ValidateFinalizarCita(finalizarCitaDto dto, AppointmentModel appointment)
@@ -902,7 +1022,19 @@ namespace project.Appointment
 
                 bool conflict = await context.Set<AppointmentModel>()
                     .AnyAsync(x => x.Id != appointment.Id && x.doctorId == appointment.doctorId && x.deleteAt == null
-                        && x.startDate < validationEndDate && (x.endDate ?? x.startDate.AddMinutes(30)) > newStartDate);
+                        && x.startDate < validationEndDate
+                        && (x.endDate > newStartDate
+                            || (x.endDate == null && context.AppointmentStatusHistories
+                                .Where(h => h.appointmentId == x.Id && h.deleteAt == null)
+                                .OrderByDescending(h => h.changedAt)
+                                .Select(h => h.status.name)
+                                .FirstOrDefault() == StatusEnCurso)
+                            || (x.endDate == null && context.AppointmentStatusHistories
+                                .Where(h => h.appointmentId == x.Id && h.deleteAt == null)
+                                .OrderByDescending(h => h.changedAt)
+                                .Select(h => h.status.name)
+                                .FirstOrDefault() != StatusEnCurso
+                                && x.startDate.AddMinutes(30) > newStartDate)));
                 if (conflict)
                     return new errorMessageDto("El medico ya tiene otra cita en el horario seleccionado.");
             }
@@ -915,13 +1047,27 @@ namespace project.Appointment
             DateTime now = DateTime.UtcNow;
             DateTime startDate = ToUtc(appointment.startDate);
             DateTime maxArrivalDate = startDate.AddMinutes(10);
-
-            if (now < startDate || now > maxArrivalDate)
-                return new errorMessageDto("La cita solo puede iniciarse desde la hora programada hasta 10 minutos despues.");
-
             string currentStatus = await GetLastAppointmentStatus(appointment.Id);
+
+            if (currentStatus == StatusEnEspera)
+            {
+                long availableDoctorId = await ObtenerDoctorDisponible(now, now.AddMinutes(30));
+                if (availableDoctorId == 0)
+                    return new errorMessageDto("No hay medicos disponibles en este momento. El paciente permanece en espera.");
+
+                appointment.doctorId = (int)availableDoctorId;
+                context.Entry(appointment).Property("doctorId1").CurrentValue = availableDoctorId;
+                appointment.startDate = now;
+                appointment.endDate = null;
+                appointment.scheduledDate = now;
+            }
+            else if (now < startDate || now > maxArrivalDate)
+            {
+                return new errorMessageDto("La cita solo puede iniciarse desde la hora programada hasta 10 minutos despues.");
+            }
+
             if (!CanStartStatus(currentStatus))
-                return new errorMessageDto("Solo se pueden iniciar citas con estado ACTIVO o REAGENDAR.");
+                return new errorMessageDto("Solo se pueden iniciar citas con estado ACTIVO, REAGENDAR o EN_ESPERA.");
 
             if (dto.bloodPressure <= 0)
                 return new errorMessageDto("La presion arterial debe ser un valor numerico mayor a cero.");
@@ -1043,7 +1189,7 @@ namespace project.Appointment
 
         private static bool CanStartStatus(string status)
         {
-            return status == StatusActivo || status == StatusReagendar;
+            return status == StatusActivo || status == StatusReagendar || status == StatusEnEspera;
         }
 
         private async Task<List<LabExamScheduleSlot>> BuildLabExamSchedule(

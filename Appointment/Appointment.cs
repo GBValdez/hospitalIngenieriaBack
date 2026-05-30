@@ -21,9 +21,9 @@ namespace fletesProyect.Appointment
         public float oxygenSaturation { get; set; }
         public float weight { get; set; }
         public float height { get; set; }
-        public int doctorId { get; set; }
+        public int? doctorId { get; set; }
         public int patientId { get; set; }
-        public Worker.Worker doctor { get; set; }
+        public Worker.Worker? doctor { get; set; }
         public Patient.Patient patient { get; set; }
 
         [NotMapped]

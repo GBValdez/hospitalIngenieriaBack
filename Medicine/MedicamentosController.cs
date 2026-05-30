@@ -58,7 +58,7 @@ namespace fletesProyect.Medicine
                 patientId = appointment.patientId,
                 patientName = appointment.patient?.name,
                 patientDpi = appointment.patient?.dpi,
-                doctorId = appointment.doctorId,
+                doctorId = appointment.doctorId ?? 0,
                 doctorName = appointment.doctor?.name,
                 appointmentDate = appointment.startDate,
                 medicines = medicines

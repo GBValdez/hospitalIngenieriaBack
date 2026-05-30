@@ -7,7 +7,7 @@ namespace project.utils.services
 {
     public class interceptorDb : SaveChangesInterceptor
     {
-        private readonly HttpContext httpContext;
+        private readonly HttpContext? httpContext;
         public interceptorDb(IHttpContextAccessor httpContextAccessor)
         {
             httpContext = httpContextAccessor.HttpContext;
@@ -26,7 +26,7 @@ namespace project.utils.services
         }
         private void addUpdate(DbContextEventData eventData)
         {
-            string id = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            string? id = httpContext?.User?.FindFirstValue(ClaimTypes.NameIdentifier);
             foreach (var entry in eventData.Context.ChangeTracker.Entries<ICommonModelHeader>())
             {
                 if (entry.State == EntityState.Added || entry.State == EntityState.Modified)

@@ -15,6 +15,19 @@ namespace project.Appointment.dto
         public emergenciaPacienteDto? patient { get; set; }
     }
 
+    public class citaPresencialDto
+    {
+        [Required(ErrorMessage = "El DPI es obligatorio.")]
+        [StringLength(13, MinimumLength = 13, ErrorMessage = "El DPI debe tener 13 caracteres.")]
+        public string dpi { get; set; }
+
+        [Required(ErrorMessage = "El motivo de la cita es obligatorio.")]
+        [StringLength(250, ErrorMessage = "El motivo no puede superar 250 caracteres.")]
+        public string reason { get; set; }
+
+        public emergenciaPacienteDto? patient { get; set; }
+    }
+
     public class emergenciaPacienteDto
     {
         [Required(ErrorMessage = "El nombre del paciente es obligatorio.")]
