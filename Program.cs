@@ -106,6 +106,12 @@ builder.Services.AddDataProtection();
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<DBProyContext>();
+    await context.Database.MigrateAsync();
+}
+
 await testUserSeeder.SeedAsync(app.Services);
 
 // Configure the HTTP request pipeline.
