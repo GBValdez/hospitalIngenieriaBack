@@ -75,6 +75,16 @@ public partial class DBProyContext : IdentityDbContext<userEntity, rolEntity, st
             .IsUnique()
             .HasFilter("\"deleteAt\" IS NULL");
 
+        modelBuilder.Entity<fletesProyect.Appointment.Appointment>()
+            .Property<long?>("doctorId1");
+
+        modelBuilder.Entity<fletesProyect.Appointment.Appointment>()
+            .HasOne(x => x.doctor)
+            .WithMany()
+            .HasForeignKey("doctorId1")
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.NoAction);
+
         modelBuilder.Entity<MedicineDiseaseOrInjuryDosage>()
             .HasIndex(x => new { x.medicineId, x.diseaseOrInjuryId })
             .IsUnique()
