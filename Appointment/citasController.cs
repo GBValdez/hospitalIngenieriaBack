@@ -757,26 +757,36 @@ namespace project.Appointment
             if (doctorSolicitado > 0)
                 doctors = doctors.Where(x => x.Id == doctorSolicitado);
 
-            return await doctors
-                .Where(doctor => !context.Set<AppointmentModel>()
-                    .Any(cita => (!excludeAppointmentId.HasValue || cita.Id != excludeAppointmentId.Value)
-                        && cita.doctorId == doctor.Id && cita.deleteAt == null
-                        && cita.startDate < fechaFin
-                        && (cita.endDate > fechaInicio
-                            || (cita.endDate == null && context.AppointmentStatusHistories
-                                .Where(h => h.appointmentId == cita.Id && h.deleteAt == null)
-                                .OrderByDescending(h => h.changedAt)
-                                .Select(h => h.status.name)
-                                .FirstOrDefault() == StatusEnCurso)
-                            || (cita.endDate == null && context.AppointmentStatusHistories
-                                .Where(h => h.appointmentId == cita.Id && h.deleteAt == null)
-                                .OrderByDescending(h => h.changedAt)
-                                .Select(h => h.status.name)
-                                .FirstOrDefault() != StatusEnCurso
-                                && cita.startDate.AddMinutes(30) > fechaInicio))))
+            List<long> doctorIds = await doctors
                 .OrderBy(x => x.Id)
                 .Select(x => x.Id)
-                .FirstOrDefaultAsync();
+                .ToListAsync();
+
+            if (doctorIds.Count == 0)
+                return 0;
+
+            List<AppointmentModel> candidateAppointments = await context.Set<AppointmentModel>()
+                .Where(cita => (!excludeAppointmentId.HasValue || cita.Id != excludeAppointmentId.Value)
+                    && cita.doctorId.HasValue
+                    && doctorIds.Contains(cita.doctorId.Value)
+                    && cita.deleteAt == null
+                    && cita.startDate < fechaFin)
+                .ToListAsync();
+
+            Dictionary<long, string> statuses = await GetLatestAppointmentStatuses(
+                candidateAppointments.Select(x => x.Id).ToList());
+
+            foreach (long doctorId in doctorIds)
+            {
+                bool occupied = candidateAppointments.Any(cita =>
+                    cita.doctorId == doctorId
+                    && IsAppointmentTimeConflict(cita, fechaInicio, statuses));
+
+                if (!occupied)
+                    return doctorId;
+            }
+
+            return 0;
         }
 
         private bool CanManageAppointment(AppointmentModel appointment)
@@ -886,23 +896,17 @@ namespace project.Appointment
             startDate = ToUtc(startDate);
             endDate = ToUtc(endDate);
 
-            return await context.Set<AppointmentModel>()
-                .AnyAsync(x => (!excludeAppointmentId.HasValue || x.Id != excludeAppointmentId.Value)
+            List<AppointmentModel> candidateAppointments = await context.Set<AppointmentModel>()
+                .Where(x => (!excludeAppointmentId.HasValue || x.Id != excludeAppointmentId.Value)
                     && x.patientId == patientId
                     && x.deleteAt == null
-                    && x.startDate < endDate
-                    && (x.endDate > startDate
-                        || (x.endDate == null && context.AppointmentStatusHistories
-                            .Where(h => h.appointmentId == x.Id && h.deleteAt == null)
-                            .OrderByDescending(h => h.changedAt)
-                            .Select(h => h.status.name)
-                            .FirstOrDefault() == StatusEnCurso)
-                        || (x.endDate == null && context.AppointmentStatusHistories
-                            .Where(h => h.appointmentId == x.Id && h.deleteAt == null)
-                            .OrderByDescending(h => h.changedAt)
-                            .Select(h => h.status.name)
-                            .FirstOrDefault() != StatusEnCurso
-                            && x.startDate.AddMinutes(30) > startDate)));
+                    && x.startDate < endDate)
+                .ToListAsync();
+
+            Dictionary<long, string> statuses = await GetLatestAppointmentStatuses(
+                candidateAppointments.Select(x => x.Id).ToList());
+
+            return candidateAppointments.Any(x => IsAppointmentTimeConflict(x, startDate, statuses));
         }
 
         private async Task<errorMessageDto> ValidateFinalizarCita(finalizarCitaDto dto, AppointmentModel appointment)
@@ -1020,21 +1024,11 @@ namespace project.Appointment
                 if (await HasPatientAppointmentConflict(appointment.patientId, newStartDate, validationEndDate, appointment.Id))
                     return new errorMessageDto("El paciente ya tiene una cita en el horario seleccionado.");
 
-                bool conflict = await context.Set<AppointmentModel>()
-                    .AnyAsync(x => x.Id != appointment.Id && x.doctorId == appointment.doctorId && x.deleteAt == null
-                        && x.startDate < validationEndDate
-                        && (x.endDate > newStartDate
-                            || (x.endDate == null && context.AppointmentStatusHistories
-                                .Where(h => h.appointmentId == x.Id && h.deleteAt == null)
-                                .OrderByDescending(h => h.changedAt)
-                                .Select(h => h.status.name)
-                                .FirstOrDefault() == StatusEnCurso)
-                            || (x.endDate == null && context.AppointmentStatusHistories
-                                .Where(h => h.appointmentId == x.Id && h.deleteAt == null)
-                                .OrderByDescending(h => h.changedAt)
-                                .Select(h => h.status.name)
-                                .FirstOrDefault() != StatusEnCurso
-                                && x.startDate.AddMinutes(30) > newStartDate)));
+                bool conflict = await ObtenerDoctorDisponible(
+                    newStartDate,
+                    validationEndDate,
+                    appointment.doctorId ?? 0,
+                    appointment.Id) == 0;
                 if (conflict)
                     return new errorMessageDto("El medico ya tiene otra cita en el horario seleccionado.");
             }
@@ -1180,6 +1174,40 @@ namespace project.Appointment
                 .FirstOrDefaultAsync();
 
             return string.IsNullOrWhiteSpace(status) ? StatusActivo : status;
+        }
+
+        private async Task<Dictionary<long, string>> GetLatestAppointmentStatuses(List<long> appointmentIds)
+        {
+            if (appointmentIds.Count == 0)
+                return new Dictionary<long, string>();
+
+            List<AppointmentStatusHistory> histories = await context.AppointmentStatusHistories
+                .Include(x => x.status)
+                .Where(x => appointmentIds.Contains(x.appointmentId) && x.deleteAt == null)
+                .OrderByDescending(x => x.changedAt)
+                .ToListAsync();
+
+            return histories
+                .GroupBy(x => x.appointmentId)
+                .ToDictionary(x => x.Key, x => x.First().status.name);
+        }
+
+        private static bool IsAppointmentTimeConflict(
+            AppointmentModel appointment,
+            DateTime requestedStartDate,
+            Dictionary<long, string> statuses)
+        {
+            if (appointment.endDate.HasValue)
+                return appointment.endDate.Value > requestedStartDate;
+
+            string status = statuses.TryGetValue(appointment.Id, out string currentStatus)
+                ? currentStatus
+                : StatusActivo;
+
+            if (status == StatusEnCurso)
+                return true;
+
+            return appointment.startDate.AddMinutes(30) > requestedStartDate;
         }
 
         private static bool CanCancelStatus(string status)
