@@ -252,12 +252,18 @@ namespace project.Appointment
             List<AppointmentAvailabilitySuggestion> suggestions = availableDoctorId == 0
                 ? await GetAppointmentAvailabilitySuggestions(fechaInicio, doctorId, patientId, excludeAppointmentId)
                 : new List<AppointmentAvailabilitySuggestion>();
+            string message = patientAvailable
+                ? availableDoctorId != 0
+                    ? "Horario disponible."
+                    : "No hay medicos disponibles para el horario seleccionado. Verifica si hay citas EN_CURSO sin finalizar."
+                : "El paciente ya tiene una cita activa o en curso que cruza con el horario seleccionado.";
 
             return Ok(new
             {
                 disponible = availableDoctorId != 0,
                 doctorId = availableDoctorId == 0 ? (long?)null : availableDoctorId,
-                recomendaciones = suggestions
+                recomendaciones = suggestions,
+                message = message
             });
         }
 
@@ -1040,7 +1046,7 @@ namespace project.Appointment
         {
             DateTime now = DateTime.UtcNow;
             DateTime startDate = ToUtc(appointment.startDate);
-            DateTime maxArrivalDate = startDate.AddMinutes(10);
+            DateTime maxArrivalDate = startDate.AddHours(2);
             string currentStatus = await GetLastAppointmentStatus(appointment.Id);
 
             if (currentStatus == StatusEnEspera)
@@ -1057,7 +1063,7 @@ namespace project.Appointment
             }
             else if (now < startDate || now > maxArrivalDate)
             {
-                return new errorMessageDto("La cita solo puede iniciarse desde la hora programada hasta 10 minutos despues.");
+                return new errorMessageDto("La cita solo puede iniciarse desde la hora programada hasta 2 horas despues.");
             }
 
             if (!CanStartStatus(currentStatus))

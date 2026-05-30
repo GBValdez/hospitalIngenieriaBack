@@ -179,9 +179,9 @@ namespace project.Exams
 
             DateTime now = DateTime.UtcNow;
             DateTime startDate = ToUtc(exam.startDate);
-            DateTime maxStartDate = startDate.AddMinutes(10);
+            DateTime maxStartDate = startDate.AddHours(2);
             if (now < startDate || now > maxStartDate)
-                return BadRequest(new errorMessageDto("El examen solo puede iniciarse desde la hora programada hasta 10 minutos despues."));
+                return BadRequest(new errorMessageDto("El examen solo puede iniciarse desde la hora programada hasta 2 horas despues."));
 
             string currentStatus = await GetLastExamStatus(exam.Id);
             if (currentStatus != StatusActivo)
