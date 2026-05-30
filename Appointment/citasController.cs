@@ -255,7 +255,7 @@ namespace project.Appointment
             string message = patientAvailable
                 ? availableDoctorId != 0
                     ? "Horario disponible."
-                    : "No hay medicos disponibles para el horario seleccionado. Verifica si hay citas EN_CURSO sin finalizar."
+                    : "No hay medicos disponibles para el horario seleccionado. Las citas sin hora final bloquean hasta 2 horas despues de su inicio."
                 : "El paciente ya tiene una cita activa o en curso que cruza con el horario seleccionado.";
 
             return Ok(new
@@ -779,14 +779,11 @@ namespace project.Appointment
                     && cita.startDate < fechaFin)
                 .ToListAsync();
 
-            Dictionary<long, string> statuses = await GetLatestAppointmentStatuses(
-                candidateAppointments.Select(x => x.Id).ToList());
-
             foreach (long doctorId in doctorIds)
             {
                 bool occupied = candidateAppointments.Any(cita =>
                     cita.doctorId == doctorId
-                    && IsAppointmentTimeConflict(cita, fechaInicio, statuses));
+                    && IsAppointmentTimeConflict(cita, fechaInicio));
 
                 if (!occupied)
                     return doctorId;
@@ -909,10 +906,7 @@ namespace project.Appointment
                     && x.startDate < endDate)
                 .ToListAsync();
 
-            Dictionary<long, string> statuses = await GetLatestAppointmentStatuses(
-                candidateAppointments.Select(x => x.Id).ToList());
-
-            return candidateAppointments.Any(x => IsAppointmentTimeConflict(x, startDate, statuses));
+            return candidateAppointments.Any(x => IsAppointmentTimeConflict(x, startDate));
         }
 
         private async Task<errorMessageDto> ValidateFinalizarCita(finalizarCitaDto dto, AppointmentModel appointment)
@@ -1182,38 +1176,14 @@ namespace project.Appointment
             return string.IsNullOrWhiteSpace(status) ? StatusActivo : status;
         }
 
-        private async Task<Dictionary<long, string>> GetLatestAppointmentStatuses(List<long> appointmentIds)
-        {
-            if (appointmentIds.Count == 0)
-                return new Dictionary<long, string>();
-
-            List<AppointmentStatusHistory> histories = await context.AppointmentStatusHistories
-                .Include(x => x.status)
-                .Where(x => appointmentIds.Contains(x.appointmentId) && x.deleteAt == null)
-                .OrderByDescending(x => x.changedAt)
-                .ToListAsync();
-
-            return histories
-                .GroupBy(x => x.appointmentId)
-                .ToDictionary(x => x.Key, x => x.First().status.name);
-        }
-
         private static bool IsAppointmentTimeConflict(
             AppointmentModel appointment,
-            DateTime requestedStartDate,
-            Dictionary<long, string> statuses)
+            DateTime requestedStartDate)
         {
             if (appointment.endDate.HasValue)
                 return appointment.endDate.Value > requestedStartDate;
 
-            string status = statuses.TryGetValue(appointment.Id, out string currentStatus)
-                ? currentStatus
-                : StatusActivo;
-
-            if (status == StatusEnCurso)
-                return true;
-
-            return appointment.startDate.AddMinutes(30) > requestedStartDate;
+            return appointment.startDate.AddHours(2) > requestedStartDate;
         }
 
         private static bool CanCancelStatus(string status)
