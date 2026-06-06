@@ -492,28 +492,33 @@ namespace project.Appointment
                 return BadRequest(new errorMessageDto("El paciente no existe. Debe registrarse desde el formulario de registro del login."));
 
             DateTime now = DateTime.UtcNow;
+            AppointmentAvailabilitySuggestion nextSlot = await GetNextAvailableAppointmentSlot(now, (int)patient.Id);
+            if (nextSlot == null)
+                return BadRequest(new errorMessageDto("No hay medicos disponibles para agendar la cita presencial en los proximos dias."));
+
             AppointmentModel appointment = new AppointmentModel
             {
                 reason = dto.reason.Trim(),
                 isEmergency = false,
-                scheduledDate = now,
-                startDate = now,
-                endDate = null,
+                scheduledDate = nextSlot.startDate,
+                startDate = nextSlot.startDate,
+                endDate = nextSlot.endDate,
                 arrivalDate = now,
-                doctorId = null,
+                doctorId = (int)nextSlot.doctorId,
                 patientId = (int)patient.Id,
                 createAt = now
             };
             context.Appointments.Add(appointment);
-            context.Entry(appointment).Property("doctorId1").CurrentValue = null;
+            context.Entry(appointment).Property("doctorId1").CurrentValue = nextSlot.doctorId;
             context.Entry(appointment).Property("patientId1").CurrentValue = patient.Id;
             await context.SaveChangesAsync();
 
-            await AddStatusHistory(appointment.Id, null, StatusEnEspera, "Cita presencial registrada; paciente en espera.");
+            await AddStatusHistory(appointment.Id, null, StatusActivo, "Cita presencial agendada en el horario disponible mas cercano.");
             await context.SaveChangesAsync();
 
+            appointment.doctor = await context.Workers.FirstOrDefaultAsync(x => x.Id == nextSlot.doctorId);
             appointment.patient = patient;
-            appointment.currentStatus = StatusEnEspera;
+            appointment.currentStatus = StatusActivo;
             return mapper.Map<citaDto>(appointment);
         }
 
