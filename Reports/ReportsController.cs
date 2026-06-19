@@ -81,6 +81,7 @@ namespace fletesProyect.Reports
             List<reportCountDto> topDiagnoses = await GetTopDiagnoses(appointmentIds, examIds);
             List<reportCountDto> topPrescribedMedicines = await GetTopPrescribedMedicines(from, to);
             List<reportCountDto> topDispatchedMedicines = await GetTopDispatchedMedicines(from, to);
+            doctorReportsDto doctorReports = await GetDoctorReports(appointmentIds, from, to, appointmentStatuses);
 
             int recipes = await context.Recipes
                 .Where(x => x.deleteAt == null
@@ -127,7 +128,8 @@ namespace fletesProyect.Reports
                 topDiagnoses = topDiagnoses,
                 topPrescribedMedicines = topPrescribedMedicines,
                 topDispatchedMedicines = topDispatchedMedicines,
-                lowStockMedicines = lowStockMedicines
+                lowStockMedicines = lowStockMedicines,
+                doctorReports = doctorReports
             };
         }
 
@@ -255,6 +257,230 @@ namespace fletesProyect.Reports
                 .ToListAsync();
         }
 
+        private async Task<doctorReportsDto> GetDoctorReports(
+            List<long> appointmentIds,
+            DateTime from,
+            DateTime to,
+            Dictionary<long, string> appointmentStatuses)
+        {
+            List<long> finalizedAppointmentIds = appointmentStatuses
+                .Where(x => x.Value == StatusFinalizada)
+                .Select(x => x.Key)
+                .ToList();
+
+            return new doctorReportsDto
+            {
+                patientsAttendedByDoctor = await GetPatientsAttendedByDoctor(appointmentIds),
+                appointmentsByDoctor = await GetAppointmentsByDoctor(appointmentIds),
+                finalizedAppointmentsByDoctor = await GetFinalizedAppointmentsByDoctor(finalizedAppointmentIds),
+                emergencyAppointmentsByDoctor = await GetEmergencyAppointmentsByDoctor(appointmentIds),
+                averageAttentionMinutesByDoctor = await GetAverageAttentionMinutesByDoctor(appointmentIds),
+                recipesByDoctor = await GetRecipesByDoctor(from, to),
+                prescribedMedicinesByDoctor = await GetPrescribedMedicinesByDoctor(from, to),
+                dispatchedMedicinesByDoctor = await GetDispatchedMedicinesByDoctor(from, to),
+                diagnosesByDoctor = await GetDiagnosesByDoctor(appointmentIds),
+                appointmentsBySpecialty = await GetAppointmentsBySpecialty(appointmentIds)
+            };
+        }
+
+        private async Task<List<reportCountDto>> GetPatientsAttendedByDoctor(List<long> appointmentIds)
+        {
+            return await context.Appointments
+                .Include(x => x.doctor)
+                .Where(x => appointmentIds.Contains(x.Id) && x.doctor != null)
+                .GroupBy(x => x.doctor.name)
+                .Select(x => new reportCountDto { name = x.Key, count = x.Select(item => item.patientId).Distinct().Count() })
+                .OrderByDescending(x => x.count)
+                .ThenBy(x => x.name)
+                .Take(10)
+                .ToListAsync();
+        }
+
+        private async Task<List<reportCountDto>> GetAppointmentsByDoctor(List<long> appointmentIds)
+        {
+            return await context.Appointments
+                .Include(x => x.doctor)
+                .Where(x => appointmentIds.Contains(x.Id) && x.doctor != null)
+                .GroupBy(x => x.doctor.name)
+                .Select(x => new reportCountDto { name = x.Key, count = x.Count() })
+                .OrderByDescending(x => x.count)
+                .ThenBy(x => x.name)
+                .Take(10)
+                .ToListAsync();
+        }
+
+        private async Task<List<reportCountDto>> GetFinalizedAppointmentsByDoctor(List<long> finalizedAppointmentIds)
+        {
+            return await context.Appointments
+                .Include(x => x.doctor)
+                .Where(x => finalizedAppointmentIds.Contains(x.Id) && x.doctor != null)
+                .GroupBy(x => x.doctor.name)
+                .Select(x => new reportCountDto { name = x.Key, count = x.Count() })
+                .OrderByDescending(x => x.count)
+                .ThenBy(x => x.name)
+                .Take(10)
+                .ToListAsync();
+        }
+
+        private async Task<List<reportCountDto>> GetEmergencyAppointmentsByDoctor(List<long> appointmentIds)
+        {
+            return await context.Appointments
+                .Include(x => x.doctor)
+                .Where(x => appointmentIds.Contains(x.Id) && x.doctor != null && x.isEmergency)
+                .GroupBy(x => x.doctor.name)
+                .Select(x => new reportCountDto { name = x.Key, count = x.Count() })
+                .OrderByDescending(x => x.count)
+                .ThenBy(x => x.name)
+                .Take(10)
+                .ToListAsync();
+        }
+
+        private async Task<List<reportCountDto>> GetAverageAttentionMinutesByDoctor(List<long> appointmentIds)
+        {
+            List<appointmentDatesReportItem> appointmentDates = await context.Appointments
+                .Include(x => x.doctor)
+                .Where(x => appointmentIds.Contains(x.Id) && x.doctor != null && x.endDate != null)
+                .Select(x => new appointmentDatesReportItem
+                {
+                    doctorName = x.doctor.name,
+                    startDate = x.startDate,
+                    endDate = x.endDate.Value
+                })
+                .ToListAsync();
+
+            List<appointmentDurationReportItem> items = appointmentDates
+                .Select(x => new appointmentDurationReportItem
+                {
+                    doctorName = x.doctorName,
+                    minutes = (decimal)(x.endDate - x.startDate).TotalMinutes
+                })
+                .ToList();
+
+            return items
+                .GroupBy(x => x.doctorName)
+                .Select(x => new reportCountDto
+                {
+                    name = x.Key,
+                    count = x.Count(),
+                    amount = Math.Round(x.Average(item => item.minutes), 2)
+                })
+                .OrderByDescending(x => x.amount)
+                .ThenBy(x => x.name)
+                .Take(10)
+                .ToList();
+        }
+
+        private async Task<List<reportCountDto>> GetRecipesByDoctor(DateTime from, DateTime to)
+        {
+            return await context.Recipes
+                .Include(x => x.appointment)
+                    .ThenInclude(x => x.doctor)
+                .Where(x => x.deleteAt == null
+                    && x.appointment.deleteAt == null
+                    && x.appointment.doctor != null
+                    && x.appointment.startDate >= from
+                    && x.appointment.startDate < to)
+                .GroupBy(x => x.appointment.doctor.name)
+                .Select(x => new reportCountDto { name = x.Key, count = x.Count() })
+                .OrderByDescending(x => x.count)
+                .ThenBy(x => x.name)
+                .Take(10)
+                .ToListAsync();
+        }
+
+        private async Task<List<reportCountDto>> GetPrescribedMedicinesByDoctor(DateTime from, DateTime to)
+        {
+            return await context.Recipes
+                .Include(x => x.medicine)
+                .Include(x => x.appointment)
+                    .ThenInclude(x => x.doctor)
+                .Where(x => x.deleteAt == null
+                    && x.medicine.deleteAt == null
+                    && x.appointment.deleteAt == null
+                    && x.appointment.doctor != null
+                    && x.appointment.startDate >= from
+                    && x.appointment.startDate < to)
+                .GroupBy(x => new { DoctorName = x.appointment.doctor.name, MedicineName = x.medicine.name })
+                .Select(x => new reportCountDto { name = x.Key.DoctorName + " - " + x.Key.MedicineName, count = x.Count() })
+                .OrderByDescending(x => x.count)
+                .ThenBy(x => x.name)
+                .Take(10)
+                .ToListAsync();
+        }
+
+        private async Task<List<reportCountDto>> GetDispatchedMedicinesByDoctor(DateTime from, DateTime to)
+        {
+            List<doctorDispatchReportItem> items = await context.Dispatchs
+                .Include(x => x.recipe)
+                    .ThenInclude(x => x.medicine)
+                .Include(x => x.recipe)
+                    .ThenInclude(x => x.appointment)
+                        .ThenInclude(x => x.doctor)
+                .Where(x => x.deleteAt == null
+                    && x.createAt >= from
+                    && x.createAt < to
+                    && x.recipe.deleteAt == null
+                    && x.recipe.medicine.deleteAt == null
+                    && x.recipe.appointment.doctor != null)
+                .Select(x => new doctorDispatchReportItem
+                {
+                    doctorName = x.recipe.appointment.doctor.name,
+                    medicineName = x.recipe.medicine.name,
+                    amount = x.amount,
+                    unitPrice = x.recipe.medicine.price
+                })
+                .ToListAsync();
+
+            return items
+                .GroupBy(x => new { x.doctorName, x.medicineName })
+                .Select(x => new reportCountDto
+                {
+                    name = x.Key.doctorName + " - " + x.Key.medicineName,
+                    count = x.Sum(item => item.amount),
+                    amount = x.Sum(item => (decimal)item.amount * (decimal)item.unitPrice)
+                })
+                .OrderByDescending(x => x.count)
+                .ThenBy(x => x.name)
+                .Take(10)
+                .ToList();
+        }
+
+        private async Task<List<reportCountDto>> GetDiagnosesByDoctor(List<long> appointmentIds)
+        {
+            return await context.AppointmentDiseaseOrInjuries
+                .Include(x => x.appointment)
+                    .ThenInclude(x => x.doctor)
+                .Include(x => x.diseaseOrInjury)
+                .Where(x => appointmentIds.Contains(x.appointmentId)
+                    && x.deleteAt == null
+                    && x.appointment.doctor != null
+                    && x.diseaseOrInjury.deleteAt == null)
+                .GroupBy(x => new { DoctorName = x.appointment.doctor.name, DiagnosisName = x.diseaseOrInjury.name })
+                .Select(x => new reportCountDto { name = x.Key.DoctorName + " - " + x.Key.DiagnosisName, count = x.Count() })
+                .OrderByDescending(x => x.count)
+                .ThenBy(x => x.name)
+                .Take(10)
+                .ToListAsync();
+        }
+
+        private async Task<List<reportCountDto>> GetAppointmentsBySpecialty(List<long> appointmentIds)
+        {
+            return await context.Appointments
+                .Include(x => x.doctor)
+                .Where(x => appointmentIds.Contains(x.Id) && x.doctor != null)
+                .Join(
+                    context.doctorSpecialties.Include(x => x.specialty).Where(x => x.deleteAt == null && x.specialty.deleteAt == null),
+                    appointment => appointment.doctor.Id,
+                    specialty => specialty.doctorId,
+                    (appointment, specialty) => specialty.specialty.name)
+                .GroupBy(x => x)
+                .Select(x => new reportCountDto { name = x.Key, count = x.Count() })
+                .OrderByDescending(x => x.count)
+                .ThenBy(x => x.name)
+                .Take(10)
+                .ToListAsync();
+        }
+
         private static DateTime ToUtc(DateTime dateTime)
         {
             if (dateTime.Kind == DateTimeKind.Utc)
@@ -275,6 +501,24 @@ namespace fletesProyect.Reports
         private class dispatchMedicineReportItem : dispatchReportItem
         {
             public string medicineName { get; set; }
+        }
+
+        private class appointmentDurationReportItem
+        {
+            public string doctorName { get; set; }
+            public decimal minutes { get; set; }
+        }
+
+        private class appointmentDatesReportItem
+        {
+            public string doctorName { get; set; }
+            public DateTime startDate { get; set; }
+            public DateTime endDate { get; set; }
+        }
+
+        private class doctorDispatchReportItem : dispatchMedicineReportItem
+        {
+            public string doctorName { get; set; }
         }
     }
 }

@@ -20,6 +20,7 @@ namespace fletesProyect.Reports.dto
         public List<reportCountDto> topPrescribedMedicines { get; set; } = new List<reportCountDto>();
         public List<reportCountDto> topDispatchedMedicines { get; set; } = new List<reportCountDto>();
         public List<lowStockMedicineDto> lowStockMedicines { get; set; } = new List<lowStockMedicineDto>();
+        public doctorReportsDto doctorReports { get; set; } = new doctorReportsDto();
     }
 
     public class reportTotalsDto
@@ -39,6 +40,20 @@ namespace fletesProyect.Reports.dto
         public string name { get; set; }
         public int count { get; set; }
         public decimal amount { get; set; }
+    }
+
+    public class doctorReportsDto
+    {
+        public List<reportCountDto> patientsAttendedByDoctor { get; set; } = new List<reportCountDto>();
+        public List<reportCountDto> appointmentsByDoctor { get; set; } = new List<reportCountDto>();
+        public List<reportCountDto> finalizedAppointmentsByDoctor { get; set; } = new List<reportCountDto>();
+        public List<reportCountDto> emergencyAppointmentsByDoctor { get; set; } = new List<reportCountDto>();
+        public List<reportCountDto> averageAttentionMinutesByDoctor { get; set; } = new List<reportCountDto>();
+        public List<reportCountDto> recipesByDoctor { get; set; } = new List<reportCountDto>();
+        public List<reportCountDto> prescribedMedicinesByDoctor { get; set; } = new List<reportCountDto>();
+        public List<reportCountDto> dispatchedMedicinesByDoctor { get; set; } = new List<reportCountDto>();
+        public List<reportCountDto> diagnosesByDoctor { get; set; } = new List<reportCountDto>();
+        public List<reportCountDto> appointmentsBySpecialty { get; set; } = new List<reportCountDto>();
     }
 
     public class lowStockMedicineDto
