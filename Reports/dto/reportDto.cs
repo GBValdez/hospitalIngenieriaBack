@@ -45,6 +45,7 @@ namespace fletesProyect.Reports.dto
     public class doctorReportsDto
     {
         public List<reportCountDto> patientsAttendedByDoctor { get; set; } = new List<reportCountDto>();
+        public List<doctorPatientAttendanceDetailDto> patientAttendanceDetails { get; set; } = new List<doctorPatientAttendanceDetailDto>();
         public List<reportCountDto> appointmentsByDoctor { get; set; } = new List<reportCountDto>();
         public List<reportCountDto> finalizedAppointmentsByDoctor { get; set; } = new List<reportCountDto>();
         public List<reportCountDto> emergencyAppointmentsByDoctor { get; set; } = new List<reportCountDto>();
@@ -54,6 +55,17 @@ namespace fletesProyect.Reports.dto
         public List<reportCountDto> dispatchedMedicinesByDoctor { get; set; } = new List<reportCountDto>();
         public List<reportCountDto> diagnosesByDoctor { get; set; } = new List<reportCountDto>();
         public List<reportCountDto> appointmentsBySpecialty { get; set; } = new List<reportCountDto>();
+    }
+
+    public class doctorPatientAttendanceDetailDto
+    {
+        public long patientId { get; set; }
+        public string patientName { get; set; }
+        public string patientDpi { get; set; }
+        public int appointmentCount { get; set; }
+        public int doctorCount { get; set; }
+        public bool attendedByMultipleDoctors { get; set; }
+        public List<string> doctorNames { get; set; } = new List<string>();
     }
 
     public class lowStockMedicineDto

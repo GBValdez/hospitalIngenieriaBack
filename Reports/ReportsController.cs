@@ -32,6 +32,16 @@ namespace fletesProyect.Reports
                 : DateTime.UtcNow.Date.AddDays(1);
             int lowStockThreshold = query.lowStockThreshold <= 0 ? 10 : query.lowStockThreshold;
 
+            if (from.Date > DateTime.UtcNow.Date || to.Date.AddDays(-1) > DateTime.UtcNow.Date)
+            {
+                return BadRequest(new { error = "Solo se pueden consultar fechas desde la fecha actual hacia atras." });
+            }
+
+            if (from >= to)
+            {
+                return BadRequest(new { error = "La fecha desde debe ser menor o igual a la fecha hasta." });
+            }
+
             List<long> appointmentIds = await context.Appointments
                 .Where(x => x.deleteAt == null && x.startDate >= from && x.startDate < to)
                 .Select(x => x.Id)
@@ -271,6 +281,7 @@ namespace fletesProyect.Reports
             return new doctorReportsDto
             {
                 patientsAttendedByDoctor = await GetPatientsAttendedByDoctor(appointmentIds),
+                patientAttendanceDetails = await GetPatientAttendanceDetails(appointmentIds),
                 appointmentsByDoctor = await GetAppointmentsByDoctor(appointmentIds),
                 finalizedAppointmentsByDoctor = await GetFinalizedAppointmentsByDoctor(finalizedAppointmentIds),
                 emergencyAppointmentsByDoctor = await GetEmergencyAppointmentsByDoctor(appointmentIds),
@@ -294,6 +305,51 @@ namespace fletesProyect.Reports
                 .ThenBy(x => x.name)
                 .Take(10)
                 .ToListAsync();
+        }
+
+        private async Task<List<doctorPatientAttendanceDetailDto>> GetPatientAttendanceDetails(List<long> appointmentIds)
+        {
+            List<patientAttendanceReportItem> items = await context.Appointments
+                .Include(x => x.patient)
+                .Include(x => x.doctor)
+                .Where(x => appointmentIds.Contains(x.Id)
+                    && x.patient != null
+                    && x.doctor != null)
+                .Select(x => new patientAttendanceReportItem
+                {
+                    patientId = x.patient.Id,
+                    patientName = x.patient.name,
+                    patientDpi = x.patient.dpi,
+                    doctorName = x.doctor.name,
+                    startDate = x.startDate
+                })
+                .ToListAsync();
+
+            return items
+                .GroupBy(x => new { x.patientId, x.patientName, x.patientDpi })
+                .Select(x =>
+                {
+                    List<string> doctorNames = x
+                        .Select(item => item.doctorName)
+                        .Distinct()
+                        .OrderBy(name => name)
+                        .ToList();
+
+                    return new doctorPatientAttendanceDetailDto
+                    {
+                        patientId = x.Key.patientId,
+                        patientName = x.Key.patientName,
+                        patientDpi = x.Key.patientDpi,
+                        appointmentCount = x.Count(),
+                        doctorCount = doctorNames.Count,
+                        attendedByMultipleDoctors = doctorNames.Count > 1,
+                        doctorNames = doctorNames
+                    };
+                })
+                .OrderByDescending(x => x.attendedByMultipleDoctors)
+                .ThenByDescending(x => x.doctorCount)
+                .ThenBy(x => x.patientName)
+                .ToList();
         }
 
         private async Task<List<reportCountDto>> GetAppointmentsByDoctor(List<long> appointmentIds)
@@ -514,6 +570,15 @@ namespace fletesProyect.Reports
             public string doctorName { get; set; }
             public DateTime startDate { get; set; }
             public DateTime endDate { get; set; }
+        }
+
+        private class patientAttendanceReportItem
+        {
+            public long patientId { get; set; }
+            public string patientName { get; set; }
+            public string patientDpi { get; set; }
+            public string doctorName { get; set; }
+            public DateTime startDate { get; set; }
         }
 
         private class doctorDispatchReportItem : dispatchMedicineReportItem
